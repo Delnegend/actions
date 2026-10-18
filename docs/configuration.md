@@ -130,7 +130,7 @@ flowchart LR
 | `version` | — | Version being released. A leading `v` is dropped. Required. |
 | `target` | — | Platform slug, e.g. `x86_64-unknown-linux-gnu`. Required. |
 | `format` | `""` | `zip`, `tar.gz`, `tar.xz` or `7z`. Empty picks `zip` on Windows and `tar.gz` elsewhere. |
-| `layout` | `dir` | `dir` puts everything under one top-level directory; `flat` places it at the archive root. |
+|  `layout` | `dir` | `dir` puts everything under one top-level directory; `flat` places it at the archive root. |
 | `output-dir` | `dist` | Where to write the archive. |
 | `upload` | `true` | Upload the archive to the Actions run. |
 | `upload-action` | `actions/upload-artifact@cf430e0…` | The upload action ref, pinned by the caller so a bump is a deliberate repin. |
@@ -160,8 +160,12 @@ filename, so an asset without one cannot be tracked at all.
 
 `dir` copies everything into one directory named after the archive, so
 extracting produces a single folder. `flat` places entries at the archive root,
-which is what a launcher script needs when it resolves a sibling by path.
-`flat` accepts a single source; several would collide on extraction.
+which is what a launcher script needs when it resolves a sibling by path — a
+binary and its script have to land side by side, and a wrapper directory would
+put them a level deeper than the script expects.
+
+`flat` refuses two entries that would claim the same name, since one would
+silently overwrite the other.
 
 #### The executable bit is recorded, not restored
 

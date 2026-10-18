@@ -145,6 +145,16 @@ def flat_entries(sources):
     return entries
 
 
+def reject_collisions(entries):
+    """Two entries sharing an arcname means one silently overwrites the other."""
+    seen = {}
+    for _, arcname in entries:
+        seen[arcname] = seen.get(arcname, 0) + 1
+    clashes = sorted(name for name, count in seen.items() if count > 1)
+    if clashes:
+        fail(f"these entries collide at the archive root: {', '.join(clashes)}")
+
+
 def write_zip(archive, entries, prefix=""):
     """ZipInfo.from_file carries st_mode into external_attr, which is the only
     place a zip can keep the executable bit."""
@@ -187,8 +197,6 @@ def main():
         fail(f"layout {layout!r} is not one of: dir, flat")
 
     sources = collect()
-    if layout == "flat" and len(sources) > 1:
-        fail("layout flat accepts a single source; use dir for several")
 
     stem = f"{name}-{version}-{target}"
     outdir = Path(env("OUTDIR") or "dist")
@@ -215,6 +223,7 @@ def main():
                       compression="xz" if fmt == "tar.xz" else "gz")
     else:
         entries = flat_entries(sources)
+        reject_collisions(entries)
         if fmt == "zip":
             write_zip(archive, entries)
         else:

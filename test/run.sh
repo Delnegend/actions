@@ -218,6 +218,9 @@ pkg() {
     printf '#!/bin/sh\necho hi\n' >app.sh && chmod +x app.sh
     printf 'licence\n' >LICENSE
     mkdir -p extra && printf 'x\n' >extra/nested.txt
+    printf '#!/bin/sh\n' >bridge-check && chmod +x bridge-check
+    # A second copy of app.sh, for the collision case.
+    mkdir -p collide && printf 'other\n' >collide/app.sh
 
     GITHUB_OUTPUT="$PKG_WORK/out.outputs" \
     env SOURCE="$source" OUTDIR=out \
@@ -297,11 +300,15 @@ test_package_artifact() {
   # upload-artifact strips the executable bit, so it has to live in the archive.
   assert_eq "executable bit is recorded in zip" "$PKG_MODE" "0755"
 
-  # flat is opt-out, and single-source only.
+  # flat is opt-out. Several sources are fine as long as they do not collide —
+  # a binary and its launcher script have to sit side by side.
   LAYOUT=flat pkg "extra" || true
   assert_contains "layout=flat places at root" "$PKG_ENTRIES" "nested.txt"
-  pkg "app.sh" EXTRA="LICENSE" LAYOUT=flat || true
-  assert_contains "layout=flat refuses several sources" "$PKG_LOG" "use dir for several"
+  pkg "app.sh" EXTRA="bridge-check" LAYOUT=flat || true
+  assert_contains "layout=flat keeps siblings side by side" "$PKG_ENTRIES" "bridge-check"
+  assert_lacks "no wrapper dir at flat root" "$PKG_ENTRIES" "rsrpc-0.29.0-"
+  LAYOUT=flat pkg "app.sh" EXTRA="collide" || true
+  assert_contains "layout=flat refuses colliding names" "$PKG_LOG" "collide at the archive root"
 
   # EXTRA adds files to a single-source package, which is how a binary and its
   # launcher script travel together.
