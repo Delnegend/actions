@@ -133,7 +133,6 @@ flowchart LR
 |  `layout` | `dir` | `dir` puts everything under one top-level directory; `flat` places it at the archive root. |
 | `output-dir` | `dist` | Where to write the archive. |
 | `upload` | `true` | Upload the archive to the Actions run. |
-| `upload-action` | `actions/upload-artifact@cf430e0…` | The upload action ref, pinned by the caller so a bump is a deliberate repin. |
 
 ### Outputs
 
@@ -182,7 +181,10 @@ step overwrites rather than appends.
 
 ### Requirements
 
-- `python3` on the runner. All three of `zip`, `tar` and the stdlib are used
-  rather than shelling out, except `7z`, which needs `p7zip-full`.
+- `python3` on the runner. `zip` and `tar` come from the stdlib rather than a
+  shell-out, except `7z`, which needs `p7zip-full`.
+- `actions/upload-artifact` is pinned inside the action, not passed in:
+  `uses:` takes a literal and rejects an expression, so a caller cannot supply
+  the ref. The pin lands here, once, rather than in every consumer.
 - `just`-style packaging steps are removed from the caller's build job; the
   action owns staging and archiving.

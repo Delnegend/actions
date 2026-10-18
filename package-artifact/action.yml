@@ -44,12 +44,6 @@ inputs:
     description: Whether to upload the archive to the Actions run.
     required: false
     default: "true"
-  upload-action:
-    description: >-
-      actions/upload-artifact ref, pinned by the caller so a bump is a
-      deliberate repin rather than a silent change in a shared action.
-    required: false
-    default: "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7"
 
 outputs:
   archive:
@@ -81,9 +75,13 @@ runs:
 
     # The archive is uploaded under its final release name, so the Actions run
     # and the release show the same string a consumer will fetch.
+    #
+    # `uses:` takes a literal, never an expression, so the ref is pinned here
+    # rather than passed in. That is the better arrangement anyway: the pin
+    # lands once in one place instead of in every consumer.
     - name: Upload archive
       if: inputs.upload == 'true'
-      uses: ${{ inputs.upload-action }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
       with:
         name: ${{ steps.package.outputs.stem }}
         path: ${{ steps.package.outputs.path }}
