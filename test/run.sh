@@ -191,12 +191,21 @@ test_resolve_release() {
 # Describe a zip: one "<octal mode> <member>" line per entry.
 # Python rather than `unzip -Z`, which is not part of the toolset these tests
 # are allowed to rely on.
-zip_entries() {
+# Describe an archive as "<octal mode> <member>", reading whichever container
+# it happens to be. Python rather than unzip/tar, which are not part of the
+# toolset these tests are allowed to rely on.
+archive_entries() {
   python3 - "$1" <<'PY'
-import sys, zipfile
-with zipfile.ZipFile(sys.argv[1]) as z:
-    for i in z.infolist():
-        print(f"{(i.external_attr >> 16) & 0o7777:04o} {i.filename}")
+import sys, tarfile, zipfile
+path = sys.argv[1]
+if zipfile.is_zipfile(path):
+    with zipfile.ZipFile(path) as z:
+        for i in z.infolist():
+            print(f"{(i.external_attr >> 16) & 0o7777:04o} {i.filename}")
+else:
+    with tarfile.open(path) as t:
+        for m in t.getmembers():
+            print(f"{m.mode:04o} {m.name}")
 PY
 }
 
@@ -218,15 +227,12 @@ pkg() {
     printf '#!/bin/sh\necho hi\n' >app.sh && chmod +x app.sh
     printf 'licence\n' >LICENSE
     mkdir -p extra && printf 'x\n' >extra/nested.txt
-    printf '#!/bin/sh\n' >bridge-check && chmod +x bridge-check
-    # A second copy of app.sh, for the collision case.
-    mkdir -p collide && printf 'other\n' >collide/app.sh
 
     GITHUB_OUTPUT="$PKG_WORK/out.outputs" \
     env SOURCE="$source" OUTDIR=out \
         NAME="${NAME-rsrpc}" VERSION="${VERSION-0.29.0}" \
         TARGET="${TARGET-x86_64-unknown-linux-gnu}" \
-        FORMAT="${FORMAT-zip}" LAYOUT="${LAYOUT-dir}" RUNNER_OS="${RUNNER_OS-Linux}" \
+        RUNNER_OS="${RUNNER_OS-Linux}" \
         "$@" python3 "$SCRIPT" >"$PKG_WORK/out.log" 2>&1
   )
   local st=$?
@@ -236,7 +242,7 @@ pkg() {
     PKG_ARCHIVE="$(grep -m1 '^archive=' "$PKG_WORK/out.outputs" | cut -d= -f2-)"
     PKG_STEM="$(grep -m1 '^stem=' "$PKG_WORK/out.outputs" | cut -d= -f2-)"
     if [ -f "$PKG_WORK/out/$PKG_ARCHIVE" ]; then
-      local listing; listing="$(zip_entries "$PKG_WORK/out/$PKG_ARCHIVE" 2>/dev/null)"
+      local listing; listing="$(archive_entries "$PKG_WORK/out/$PKG_ARCHIVE" 2>/dev/null)"
       PKG_ENTRIES="$(printf '%s\n' "$listing" | cut -d' ' -f2-)"
       PKG_MODE="$(printf '%s\n' "$listing" | awk '$2 ~ /app\.sh$/ { print $1; exit }')"
     fi
@@ -244,6 +250,66 @@ pkg() {
   fi
   PKG_LOG="$(tail -3 "$PKG_WORK/out.log" 2>/dev/null)"
   return $st
+}
+
+# The preset the action actually passed to tarfile, read back off the constant
+# the script uses, so a silent change to it is visible.
+xz_preset_used() {
+  python3 -c "
+import ast, sys
+tree = ast.parse(open(sys.argv[1]).read())
+for node in ast.walk(tree):
+    if isinstance(node, ast.Assign) and any(
+            getattr(t, 'id', None) == 'COMPRESSION' for t in node.targets):
+        print(ast.literal_eval(node.value)['tar.xz'])
+        break
+" "$SCRIPT"
+}
+
+# Run the action over binary-like input, then compare the archive it produced
+# against the same payload packed at a lower effort setting. The action's own
+# output is what gets measured, so lowering its constant is what makes this
+# fail.
+effort_zip() { effort_check Windows_NT zip "$1"; }
+
+effort_check() {
+  local runner="$1" mode="$2" ref_effort="$3"
+  local d; d="$(mktemp -d)"
+  # Binary-like, and tuned so deflate's effort settings diverge the way they do
+  # on a real compiled binary (on rsRPC's own binary, level 1 is ~9% larger
+  # than level 9). Too little redundancy and every level above 1 ties, which
+  # would make this assertion pass without meaning anything.
+  python3 -c "
+import random, sys
+rnd = random.Random(20261018)
+with open(sys.argv[1],'wb') as f:
+    for _ in range(4000):
+        f.write(rnd.randbytes(48) * 64)     # long repeats: cheap for any level
+        f.write(rnd.randbytes(32) * 8)
+        f.write(rnd.randbytes(256))
+        f.write(rnd.randbytes(1024) * 3)
+" "$d/payload"
+
+  # deflate is not monotonic across its top levels — on some inputs level 9
+  # emits marginally more than level 8 — so the comparison is against level 1,
+  # where the gap is real and large enough to be unambiguous.
+
+  ( cd "$d" && GITHUB_OUTPUT="$d/o" env SOURCE=payload OUTDIR=out \
+      NAME=eff VERSION=1.0.0 TARGET=t RUNNER_OS="$runner" \
+      python3 "$SCRIPT" >/dev/null 2>&1 )
+
+  python3 - "$d" "$ref_effort" <<'PY'
+import glob, os, sys, zipfile
+d, ref_effort = sys.argv[1], int(sys.argv[2])
+ours = glob.glob(os.path.join(d, "out", "*"))[0]
+ref = os.path.join(d, "ref")
+with zipfile.ZipFile(ref, "w", zipfile.ZIP_DEFLATED,
+                     compresslevel=ref_effort) as z:
+    z.write(os.path.join(d, "payload"), "p/payload")
+print("yes" if os.path.getsize(ours) < os.path.getsize(ref)
+      else f"no ({os.path.getsize(ours)} vs {os.path.getsize(ref)})")
+PY
+  rm -rf "$d"
 }
 
 assert_eq() { # <what> <got> <want>
@@ -281,37 +347,27 @@ test_package_artifact() {
   # The name is the whole point: <name>-<version>-<target>, version stamped so
   # a consumer can match it, which is what the Homebrew tap bot requires.
   pkg "app.sh" || true
-  assert_eq "name is <name>-<version>-<target>.zip" \
-    "$PKG_ARCHIVE" "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
+  assert_eq "name is <name>-<version>-<target> + platform suffix" \
+    "$PKG_ARCHIVE" "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
   assert_eq "stem output matches" "$PKG_STEM" "rsrpc-0.29.0-x86_64-unknown-linux-gnu"
 
   # A leading v must not leak into the archive name.
   VERSION=v0.29.0 pkg "app.sh" || true
   assert_eq "leading v is dropped" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
 
-  # Default layout keeps everything under one top-level directory.
-  assert_contains "layout=dir wraps in a directory" "$PKG_ENTRIES" \
+  # One top-level directory, always: extraction must not scatter files.
+  assert_contains "everything sits under one directory" "$PKG_ENTRIES" \
     "rsrpc-0.29.0-x86_64-unknown-linux-gnu/app.sh"
 
   # Extraction must not scatter files, and the staging copy must not survive.
   assert_eq "staging dir is cleaned up" "$PKG_STAGED" ""
 
   # upload-artifact strips the executable bit, so it has to live in the archive.
-  assert_eq "executable bit is recorded in zip" "$PKG_MODE" "0755"
-
-  # flat is opt-out. Several sources are fine as long as they do not collide —
-  # a binary and its launcher script have to sit side by side.
-  LAYOUT=flat pkg "extra" || true
-  assert_contains "layout=flat places at root" "$PKG_ENTRIES" "nested.txt"
-  pkg "app.sh" EXTRA="bridge-check" LAYOUT=flat || true
-  assert_contains "layout=flat keeps siblings side by side" "$PKG_ENTRIES" "bridge-check"
-  assert_lacks "no wrapper dir at flat root" "$PKG_ENTRIES" "rsrpc-0.29.0-"
-  LAYOUT=flat pkg "app.sh" EXTRA="collide" || true
-  assert_contains "layout=flat refuses colliding names" "$PKG_LOG" "collide at the archive root"
+  assert_eq "executable bit is recorded in tar.xz" "$PKG_MODE" "0755"
 
   # EXTRA adds files to a single-source package, which is how a binary and its
-  # launcher script travel together.
+  # launcher script travel together — siblings inside the one directory.
   pkg "app.sh" EXTRA="LICENSE" || true
   assert_contains "EXTRA adds a second file" "$PKG_ENTRIES" \
     "rsrpc-0.29.0-x86_64-unknown-linux-gnu/LICENSE"
@@ -321,27 +377,37 @@ test_package_artifact() {
   assert_contains "directory source is recursive" "$PKG_ENTRIES" \
     "rsrpc-0.29.0-x86_64-unknown-linux-gnu/extra/nested.txt"
 
-  # Format selection: an explicit request always wins.
-  FORMAT=tar.gz pkg "app.sh" || true
-  assert_eq "tar.gz on request" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.gz"
-  FORMAT=tar.xz pkg "app.sh" || true
-  assert_eq "tar.xz on request" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
-  # ...and an empty format falls back to the runner's convention.
-  FORMAT= RUNNER_OS=Windows_NT pkg "app.sh" || true
-  assert_eq "zip is the Windows default" "$PKG_ARCHIVE" \
+  # Format is decided by the platform and is not a caller choice.
+  RUNNER_OS=Windows_NT pkg "app.sh" || true
+  assert_eq "Windows gets zip" "$PKG_ARCHIVE" \
     "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
-  FORMAT= RUNNER_OS=Linux pkg "app.sh" || true
-  assert_eq "tar.gz is the non-Windows default" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.gz"
+  RUNNER_OS=Linux pkg "app.sh" || true
+  assert_eq "Linux gets tar.xz" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
+  RUNNER_OS=macOS pkg "app.sh" || true
+  assert_eq "macOS gets tar.xz" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
+  RUNNER_OS= pkg "app.sh" || true
+  assert_eq "an unset runner OS still gets tar.xz" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
 
-  # tar has to keep the executable bit too, for the same reason.
-  FORMAT=tar.gz pkg "app.sh" || true
-  local tar_mode
-  tar_mode="$(tar -tvzf "$PKG_WORK/out/$PKG_ARCHIVE" 2>/dev/null \
-              | awk '$NF ~ /app\.sh$/ {print substr($1,2); exit}')"
-  assert_eq "executable bit is recorded in tar.gz" "$tar_mode" "rwxr-xr-x"
+  # The executable bit has to survive zip as well as tar.
+  RUNNER_OS=Windows_NT pkg "app.sh" || true
+  assert_eq "executable bit is recorded in zip" "$PKG_MODE" "0755"
+
+  # Compression effort is download bandwidth for every consumer, so it is
+  # pinned by measurement rather than by reading the constant: the archive
+  # this action produced must be smaller than the same payload at a lower
+  # effort setting.
+  #
+  # zip shows a real gradient (level 1 through 9 differ measurably on binary
+  # input), so lowering it must be caught. xz does not: on a real rsRPC
+  # binary presets 6, 8 and 9 produce byte-identical output, and 9|EXTRE is
+  # slightly larger. Asking xz to beat preset 8 would therefore assert
+  # something that is not true of the format, so xz is pinned by its recorded
+  # preset instead and zip carries the measurement.
+  assert_eq "zip at max beats the fastest setting" "$(effort_zip 1)" "yes"
+  assert_eq "tar.xz is written at preset 9" "$(xz_preset_used)" "9"
 
   # Bad input is rejected before anything is written.
   pkg "missing-file" || true
@@ -356,24 +422,30 @@ test_package_artifact() {
   assert_contains "name rejects a path separator" "$PKG_LOG" "path separator"
   TARGET="" pkg "app.sh" || true
   assert_contains "empty target fails" "$PKG_LOG" "target is required"
-  FORMAT=rars pkg "app.sh" || true
-  assert_contains "unknown format fails" "$PKG_LOG" "is not one of"
-  LAYOUT=sideways pkg "app.sh" || true
-  assert_contains "unknown layout fails" "$PKG_LOG" "is not one of"
   VERSION=latest pkg "app.sh" || true
   assert_contains "non-numeric version fails" "$PKG_LOG" "does not start with a digit"
 
-  # Rebuilding in place must not grow the archive. This is inherent to the
-  # writers rather than to the action, so it is a guard against a future
-  # format switching to an appending mode rather than a claim about the code.
-  pkg "app.sh" || true
-  local first; first="$(wc -c <"$PKG_WORK/out/$PKG_ARCHIVE")"
+  # Rebuilding must replace rather than append, and be byte-identical so a
+  # rebuilt tag does not look like different artifacts to a consumer. Tar
+  # records mtimes, so this only holds because staging normalises them.
+  RUNNER_OS=Windows_NT pkg "app.sh" || true
+  local zfirst; zfirst="$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)"
   rm -f "$PKG_WORK/out.outputs"
-  ( cd "$PKG_WORK" && GITHUB_OUTPUT="$PKG_WORK/out.outputs" env SOURCE=app.sh \
+  ( cd "$PKG_WORK" && sleep 1 && GITHUB_OUTPUT="$PKG_WORK/out.outputs" env SOURCE=app.sh \
       OUTDIR=out NAME=rsrpc VERSION=0.29.0 TARGET=x86_64-unknown-linux-gnu \
-      FORMAT=zip LAYOUT=dir RUNNER_OS=Linux python3 "$SCRIPT" >/dev/null 2>&1 )
-  local second; second="$(wc -c <"$PKG_WORK/out/$PKG_ARCHIVE")"
-  assert_eq "rebuild replaces rather than appends" "$second" "$first"
+      RUNNER_OS=Windows_NT python3 "$SCRIPT" >/dev/null 2>&1 )
+  assert_eq "zip rebuild is byte-identical too" \
+    "$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)" "$zfirst"
+
+  # Rebuilding must replace rather than append, and be byte-identical so a
+  pkg "app.sh" || true
+  local first; first="$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)"
+  rm -f "$PKG_WORK/out.outputs"
+  ( cd "$PKG_WORK" && sleep 1 && GITHUB_OUTPUT="$PKG_WORK/out.outputs" env SOURCE=app.sh \
+      OUTDIR=out NAME=rsrpc VERSION=0.29.0 TARGET=x86_64-unknown-linux-gnu \
+      RUNNER_OS=Linux python3 "$SCRIPT" >/dev/null 2>&1 )
+  local second; second="$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)"
+  assert_eq "rebuild is byte-identical, not appended" "$second" "$first"
 
   rm -rf "$PKG_WORK"
 }

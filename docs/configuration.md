@@ -122,6 +122,12 @@ flowchart LR
 
 ### Inputs
 
+A caller supplies only what is unique to their build. Format, compression
+effort, directory layout and the archive name are not inputs: each is a decision
+a consumer eventually has to handle, and leaving one at the call site is how
+`<name>-<target>.zip` and `<name>-<version>-<target>.tar.xz` end up in the same
+tap.
+
 | Input | Default | Description |
 |---|---|---|
 | `source` | `""` | Path to a file or directory to package. A directory is packaged whole, recursively. |
@@ -129,10 +135,22 @@ flowchart LR
 | `name` | — | Artifact base name, e.g. `rsrpc`. Required. |
 | `version` | — | Version being released. A leading `v` is dropped. Required. |
 | `target` | — | Platform slug, e.g. `x86_64-unknown-linux-gnu`. Required. |
-| `format` | `""` | `zip`, `tar.gz`, `tar.xz` or `7z`. Empty picks `zip` on Windows and `tar.gz` elsewhere. |
-|  `layout` | `dir` | `dir` puts everything under one top-level directory; `flat` places it at the archive root. |
 | `output-dir` | `dist` | Where to write the archive. |
 | `upload` | `true` | Upload the archive to the Actions run. |
+
+### What the action decides
+
+| | Choice | Why |
+|---|---|---|
+| Name | `<name>-<version>-<target>.<ext>` | Version-stamped, so a consumer can match a release asset without hardcoding a target triple. |
+| Format | `zip` on Windows, `tar.xz` elsewhere | Zip is what a Windows user double-clicks; xz is materially smaller on compiled binaries and tar is what a Unix user reaches for. |
+| Effort | Maximum for the chosen format | Download bandwidth for every consumer. |
+| Layout | One directory named after the archive | Extraction produces a single folder instead of scattering files. |
+| Mode | Recorded inside the archive | `download-artifact` strips it, so restoring it afterwards is restoring what the archive lost on the way out. |
+
+The format is chosen from the runner's OS, so a matrix entry building the same
+target on two platforms would produce different extensions. Each matrix entry
+targets one platform, which is the case the release workflows use.
 
 ### Outputs
 
@@ -155,16 +173,16 @@ The version is part of the name on purpose: the Homebrew tap bot resolves a
 formula's next version by matching release assets against a version-stamped
 filename, so an asset without one cannot be tracked at all.
 
-#### Layout decides whether extraction scatters files
+#### The archive is reproducible
 
-`dir` copies everything into one directory named after the archive, so
-extracting produces a single folder. `flat` places entries at the archive root,
-which is what a launcher script needs when it resolves a sibling by path — a
-binary and its script have to land side by side, and a wrapper directory would
-put them a level deeper than the script expects.
+Tar records mtimes, so two runs over the same commit would otherwise produce
+different bytes and a rebuilt tag would look like a different artifact.
+Staging normalises every timestamp, which makes the archive reproducible.
+`SOURCE_DATE_EPOCH` overrides the value; it is clamped to 1980 for zip, whose
+entries cannot represent anything earlier.
 
-`flat` refuses two entries that would claim the same name, since one would
-silently overwrite the other.
+The staging copy is removed afterwards, so the output directory holds only the
+archive.
 
 #### The executable bit is recorded, not restored
 
@@ -181,10 +199,10 @@ step overwrites rather than appends.
 
 ### Requirements
 
-- `python3` on the runner. `zip` and `tar` come from the stdlib rather than a
-  shell-out, except `7z`, which needs `p7zip-full`.
+- `python3` on the runner. Both archive formats are written with the standard
+  library, so nothing needs installing.
 - `actions/upload-artifact` is pinned inside the action, not passed in:
   `uses:` takes a literal and rejects an expression, so a caller cannot supply
   the ref. The pin lands here, once, rather than in every consumer.
-- `just`-style packaging steps are removed from the caller's build job; the
-  action owns staging and archiving.
+- The packaging and archiving steps are gone from the caller's build job; the
+  action owns them, and nothing needs installing to produce either format.

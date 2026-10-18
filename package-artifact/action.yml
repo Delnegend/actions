@@ -1,8 +1,11 @@
 name: package-artifact
 description: >-
-  Stage, archive and upload one build artifact under a consistent name:
-  `<name>-<version>-<target>.<ext>`, with the executable bit recorded inside
-  the archive and a leading v on the version dropped.
+  Stage, archive and upload one build artifact. The caller supplies only what
+  is unique to their build: the binary, the version and the target triple.
+  Format, compression effort, directory layout and the archive name are
+  decided here — zip at maximum effort on Windows, tar.xz at maximum effort
+  everywhere else, one top-level directory, and the executable bit recorded
+  inside the archive.
 
 inputs:
   source:
@@ -24,18 +27,6 @@ inputs:
   target:
     description: Platform slug, e.g. x86_64-unknown-linux-gnu.
     required: true
-  format:
-    description: >-
-      zip | tar.gz | tar.xz | 7z. Empty picks zip on Windows and tar.gz
-      elsewhere.
-    required: false
-    default: ""
-  layout:
-    description: >-
-      dir puts everything under one top-level directory named after the
-      archive; flat places it at the archive root. Accepts a single source.
-    required: false
-    default: "dir"
   output-dir:
     description: Directory to write the archive into.
     required: false
@@ -67,8 +58,6 @@ runs:
         NAME: ${{ inputs.name }}
         VERSION: ${{ inputs.version }}
         TARGET: ${{ inputs.target }}
-        FORMAT: ${{ inputs.format }}
-        LAYOUT: ${{ inputs.layout }}
         OUTDIR: ${{ inputs.output-dir }}
         RUNNER_OS: ${{ runner.os }}
       run: python3 "$GITHUB_ACTION_PATH/package-artifact.py"
