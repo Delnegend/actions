@@ -117,7 +117,11 @@ def preview(kind):
 
 def test_build(ref):
     print(f"Test build against commit {ref} (will not publish).")
-    emit(ref=ref, version=ref, publish="false", skip="false")
+    # The version lands in an archive filename, and the packaging action
+    # requires it to read as a version rather than an arbitrary identifier. A
+    # bare SHA fails that, so prefix it: the archive stays unmistakably a test
+    # build while naming the commit it came from.
+    emit(ref=ref, version=f"0.0.0-test.{ref[:7]}", publish="false", skip="false")
 
 
 def rebuild(ref):

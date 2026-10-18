@@ -148,6 +148,29 @@ test_resolve_release() {
   run "sha -> no publish"             ok 0 0 INPUT_REF=abc1234 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
                                        BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT=
 
+  # The test-build version goes straight into an archive filename downstream,
+  # so it has to be one package-artifact accepts. Asserted against that action
+  # rather than against a rule restated here, so the two cannot drift apart.
+  setup "1.2.3" "v1.2.3"
+  export GITHUB_OUTPUT="$WORK/out"
+  local SHA_TEST
+  (cd "$WORK/repo" && env INPUT_REF=abc1234def5678 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
+       BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT= python3 "$SCRIPT") >/dev/null 2>&1
+  SHA_TEST="$(sed -n 's/^version=//p' "$GITHUB_OUTPUT" | head -1)"
+  # Absolute, captured before the subshell changes directory.
+  local PKG_PY="$PWD/package-artifact/package-artifact.py"
+  mkdir -p "$WORK/stage" && printf 'x\n' >"$WORK/stage/app"
+  if [ -n "$SHA_TEST" ] && (cd "$WORK/stage" && GITHUB_OUTPUT="$WORK/pkg-out" \
+       SOURCE=app NAME=app VERSION="$SHA_TEST" TARGET=x86_64-unknown-linux-gnu \
+       OUTDIR=dist python3 "$PKG_PY" >/dev/null 2>&1) \
+     && [ -f "$WORK/stage/dist/app-$SHA_TEST-x86_64-unknown-linux-gnu.tar.xz" ] \
+     && [ "$SHA_TEST" = "0.0.0-test.abc1234" ]; then
+    ok "test-build version packages as $SHA_TEST"
+  else
+    bad "test-build version packages" "version=$SHA_TEST is not 0.0.0-test.<sha>"
+  fi
+  teardown
+
   # Tag rebuild.
   run "tag rebuild -> publish"        ok 0 1 INPUT_REF=v1.2.3 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
                                        BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT=

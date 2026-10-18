@@ -52,7 +52,7 @@ projects; everything else is the same call.
 | Output | Description |
 |---|---|
 | `ref` | What the build job checks out: a tag, or a SHA for a test-build. |
-| `version` | Version being released, without the `v` prefix. |
+| `version` | Version being released, without the `v` prefix. A test-build reports `0.0.0-test.<short-sha>`, so the archives it names are unmistakably not a release while still recording which commit they came from. |
 | `publish` | `true` when this run should create a release. |
 | `skip` | `true` when there is nothing to build. |
 
