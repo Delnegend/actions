@@ -17,10 +17,11 @@ on:
     inputs:
       scans:
         description: >-
-          Scans to run, from actionlint, semgrep, trivy and osv. Narrow it for
-          a project with no lockfile, where OSV-Scanner has nothing to scan.
+          Scans to run, from gitleaks, actionlint, semgrep, trivy and osv.
+          Narrow it for a project with no lockfile, where OSV-Scanner has
+          nothing to scan.
         type: string
-        default: actionlint semgrep trivy osv
+        default: gitleaks actionlint semgrep trivy osv
       trivy-scanners:
         description: >-
           Scanners Trivy runs. Empty means Trivy's own default, which is
@@ -38,7 +39,7 @@ on:
       scans:
         description: Scans to run.
         type: string
-        default: actionlint semgrep trivy osv
+        default: gitleaks actionlint semgrep trivy osv
       trivy-scanners:
         description: Scanners Trivy runs.
         type: string
@@ -52,6 +53,19 @@ permissions:
   contents: read
 
 jobs:
+  gitleaks:
+    name: Secret Scanning (Gitleaks)
+    if: contains(inputs.scans, 'gitleaks')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The whole history: a leaked secret lives in a past commit, not in
+          # the tree at HEAD.
+          fetch-depth: 0
+      - name: Run Gitleaks
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/path" ghcr.io/gitleaks/gitleaks:latest detect --source=/path --verbose
+
   actionlint:
     name: Workflow lint (actionlint)
     if: contains(inputs.scans, 'actionlint')
