@@ -37,46 +37,44 @@ runs:
 
 ## Testing
 
-Composite action scripts are plain bash, so they can be exercised outside
-Actions: write the `run:` block to a file and drive it with environment
-variables against a throwaway git repository.
+`./test/run.sh` extracts the `run:` block from an action and drives it against
+throwaway git repositories with environment variables standing in for the
+action inputs. Outputs are read from `$GITHUB_OUTPUT` exactly as the runner
+would. `CI` runs it on every push and pull request.
 
 ```bash
-d="$(mktemp -d)"; git -C "$d" init -q
-git -C "$d" config user.email t@t; git -C "$d" config user.name t
-printf 'name = "x"\nversion = "1.2.3"\n' > "$d/Cargo.toml"
-git -C "$d" add -A; git -C "$d" commit -qm init
-git -C "$d" tag -a v1.2.3 -m r
-
-(cd "$d" && GITHUB_OUTPUT="$d/out" \
-  INPUT_REF= DRY_RUN=false GATE_SHA= MANIFEST_PATH=Cargo.toml \
-  BUMP_COMMAND="just bump" BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT= \
-  bash resolve.sh)
-
-cat "$d/out"   # ref / version / publish / skip
+./test/run.sh                 # every action
+./test/run.sh resolve-release # one action
 ```
 
-Assert on the four outputs and the exit status. Cover every dispatch mode, the
-skip path, the recovery path, and each rejection case — the failure paths are
-where release logic goes wrong.
+Run it locally before pushing — it needs only bash, git and awk, and takes
+about a minute. Each case sets up a repo with a bare `origin` and a stub
+`just`, so the push paths are exercised for real rather than mocked: a case
+can assert the tag actually landed on the remote.
 
-Two traps worth knowing:
+Two traps worth knowing, both hit while writing these tests:
 
 - `grep -c` exits non-zero when it finds nothing, so `n=$(grep -c x f || echo 0)`
-  yields `"0\n0"`. Check the exit status instead.
+  yields `"0\n0"` and every assertion silently mismatches.
 - The fixtures must match what the action actually reads. A `Cargo.toml`
   written as JSON on one line will not match `grep -m1 '^version = '`.
 
+Mutate the action before trusting a green run — change the skip guard and
+confirm the suite goes red. A test that cannot fail proves nothing.
+
 ## Linting
 
-Actions are not covered by `just check`, so validate them explicitly:
+`just check` does not exist here — there is no toolchain. Two jobs cover it:
 
-```bash
-actionlint resolve-release/action.yml
-```
+- **Workflow lint** runs `actionlint` over `.github/workflows/`, the same
+  command the consuming projects run.
+- **Tests** runs `./test/run.sh`, which is what actually verifies the actions.
 
-Every consuming project runs this in CI as the `Workflow lint (actionlint)`
-job, which covers that project's workflows — not this repository's own files.
+actionlint cannot lint an `action.yml` on its own: it parses one as a
+*workflow* and reports `"jobs" section is missing`. Its action-metadata checks
+only fire when a workflow references the action through `uses:`. So it is
+deliberately not pointed at `resolve-release/action.yml` — passing it would be
+a guaranteed false failure.
 
 ## Versioning
 

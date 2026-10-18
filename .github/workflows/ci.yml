@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Lints this repository's own workflows. actionlint parses a bare action.yml
+  # as a workflow and reports it invalid, so it is deliberately not pointed at
+  # resolve-release/action.yml — the test job covers that file instead.
+  workflow-lint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Run actionlint
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo rhysd/actionlint:1.7.12
+
+  tests:
+    name: Tests (resolve-release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # git config is needed because the fixtures create throwaway commits.
+      - name: Configure git
+        run: git config --global user.email ci@example.com && git config --global user.name CI
+      - name: Run tests
+        run: ./test/run.sh
