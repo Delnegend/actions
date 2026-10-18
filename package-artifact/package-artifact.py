@@ -30,7 +30,8 @@ holding `0.29.0` produce the same archive.
 
 Environment, set by the action wrapper:
 
-  SOURCE      path to a file or directory to package
+  SOURCE      path to a file or directory to package. For a Windows target
+              the .exe suffix is tried when the plain path is absent
   EXTRA       optional space-separated additional paths to include
   NAME        artifact base name, e.g. rsrpc
   VERSION     version being released, with or without a leading v
@@ -73,6 +74,7 @@ NotSupportedError = getattr(errno, "NotSupportedError", OSError)
 # name instead of position.
 OS = {"windows", "linux", "darwin", "apple", "freebsd", "netbsd", "openbsd"}
 FORMAT = {"windows": "zip"}
+EXECUTABLE_SUFFIX = {"windows": ".exe"}
 SUFFIX = {"zip": ".zip", "tar.xz": ".tar.xz"}
 COMPRESSION = {"zip": 9, "tar.xz": 9}
 # tarfile names the compression, not the format.
@@ -120,27 +122,54 @@ def check_component(value, label):
     return value
 
 
-def archive_format(target):
-    """The format for the platform being built for. Not a call-site choice.
-
-    The OS field is matched by name, not position, because a Windows triple
-    carries a vendor field that a Unix one does not.
-    """
+def target_os(target):
+    """The OS field of a target triple, or empty when it names none we know."""
     for field in target.lower().split("-"):
         if field in OS:
-            return FORMAT.get(field, "tar.xz")
-    return "tar.xz"
+            return field
+    return ""
 
 
-def collect():
+def archive_format(target):
+    """The format for the platform being built for. Not a call-site choice."""
+    return FORMAT.get(target_os(target), "tar.xz")
+
+
+def executable_suffix(target):
+    """`.exe` for a Windows target, nothing otherwise.
+
+    Every compiler appends it and every caller would otherwise have to carry
+    the same conditional in its matrix, which is where the duplication this
+    replaces came from.
+    """
+    return EXECUTABLE_SUFFIX.get(target_os(target), "")
+
+
+def resolve(path, target):
+    """Find the file at `path`, appending the platform's executable suffix.
+
+    The plain path wins when it exists, so a caller that already has the exact
+    name is never redirected.
+    """
+    candidate = Path(path)
+    if candidate.exists():
+        return candidate
+    suffix = executable_suffix(target)
+    if suffix:
+        suffixed = Path(f"{path}{suffix}")
+        if suffixed.exists():
+            return suffixed
+        fail(f"{path} does not exist, nor {path}{suffix}")
+    fail(f"{path} does not exist")
+
+
+def collect(target):
     """Expand every requested path, keeping order and dropping empties."""
     found = []
     for raw in [env("SOURCE"), *env("EXTRA").split()]:
         if not raw:
             continue
-        path = Path(raw)
-        if not path.exists():
-            fail(f"{raw} does not exist")
+        path = resolve(raw, target)
         if path not in found:
             found.append(path)
     if not found:
@@ -243,7 +272,7 @@ def main():
     target = check_component(env("TARGET"), "target")
     version = normalise_version(env("VERSION"))
     fmt = archive_format(target)
-    sources = collect()
+    sources = collect(target)
 
     stem = f"{name}-{version}-{target}"
     outdir = Path(env("OUTDIR") or "dist")

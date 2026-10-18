@@ -130,7 +130,7 @@ tap.
 
 | Input | Default | Description |
 |---|---|---|
-| `source` | `""` | Path to a file or directory to package. A directory is packaged whole, recursively. |
+| `source` | `""` | Path to a file or directory to package. A directory is packaged whole, recursively. For a Windows target, `.exe` is appended when the path as given is not there, so a matrix entry names the binary once and never repeats the rule. |
 | `extra` | `""` | Space-separated additional paths, for a binary plus its launcher script. |
 | `name` | — | Artifact base name, e.g. `rsrpc`. Required. |
 | `version` | — | Version being released. A leading `v` is dropped. Required. |
@@ -147,6 +147,7 @@ tap.
 | Effort | Maximum for the chosen format | Download bandwidth for every consumer. |
 | Layout | One directory named after the archive | Extraction produces a single folder instead of scattering files. |
 | Mode | Recorded inside the archive | `download-artifact` strips it, so restoring it afterwards is restoring what the archive lost on the way out. |
+| Executable suffix | `.exe` for a Windows target | Derived from `target`, so `source: .../release/rsrpc-cli` finds `rsrpc-cli.exe` on Windows and the bare file elsewhere. An exact path always wins. |
 
 The format follows the target, so the same build produces the same extension
 regardless of which runner compiled it.
@@ -171,6 +172,18 @@ silently became something else is worse than one that failed.
 The version is part of the name on purpose: the Homebrew tap bot resolves a
 formula's next version by matching release assets against a version-stamped
 filename, so an asset without one cannot be tracked at all.
+
+#### The executable suffix follows the target
+
+Every compiler appends `.exe` on Windows, so a caller naming a build output
+would otherwise carry the same conditional in its matrix. The action derives
+it from `target` and tries the plain path first, then the suffixed one, so a
+caller that already knows the exact name is never redirected. A path that is
+neither fails with both spellings named, because guessing which was tried is
+worse than reading it.
+
+`extra` paths go through the same resolution, so a script that does not carry
+the suffix is unaffected.
 
 #### The archive is reproducible
 

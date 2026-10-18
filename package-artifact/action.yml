@@ -9,7 +9,10 @@ description: >-
 
 inputs:
   source:
-    description: Path to a file or directory to package.
+    description: >-
+      Path to a file or directory to package. For a Windows target the .exe
+      suffix is tried when the path as given is not there, so a matrix entry
+      names the binary once and never repeats the rule.
     required: false
     default: ""
   extra:

@@ -227,6 +227,11 @@ pkg() {
     printf '#!/bin/sh\necho hi\n' >app.sh && chmod +x app.sh
     printf 'licence\n' >LICENSE
     mkdir -p extra && printf 'x\n' >extra/nested.txt
+    # Windows-shaped fixtures for the suffix cases: `onlyexe` exists only with
+    # the suffix, `bothsuffixed` exists both ways so the exact name can win.
+    printf '#!/bin/sh\n' >onlyexe.exe && chmod +x onlyexe.exe
+    printf 'x\n' >bothsuffixed
+    printf 'x\n' >bothsuffixed.exe
 
     GITHUB_OUTPUT="$PKG_WORK/out.outputs" \
     env SOURCE="$source" OUTDIR=out \
@@ -469,6 +474,37 @@ test_package_artifact() {
   # preset instead and zip carries the measurement.
   assert_eq "zip at max beats the fastest setting" "$(effort_zip 1)" "yes"
   assert_eq "tar.xz is written at preset 9" "$(xz_preset_used)" "9"
+
+  # The executable suffix comes from the target, not the caller. A Windows
+  # target builds `rsrpc-cli.exe`, so a matrix entry names `rsrpc-cli` and lets
+  # the action find the file.
+  TARGET=x86_64-pc-windows-msvc pkg "onlyexe" || true
+  assert_contains "a Windows target appends .exe" "$PKG_ENTRIES" "onlyexe.exe"
+  TARGET=i686-pc-windows-gnu pkg "onlyexe" || true
+  assert_contains "a mingw Windows target appends .exe" "$PKG_ENTRIES" "onlyexe.exe"
+  TARGET=x86_64-unknown-linux-gnu pkg "bothsuffixed" || true
+  assert_contains "a Linux target wants no suffix" "$PKG_ENTRIES" "bothsuffixed"
+  assert_lacks "and does not invent one" "$PKG_ENTRIES" "bothsuffixed.exe"
+
+  # An exact name always wins, so a caller with the real path is never moved.
+  TARGET=x86_64-pc-windows-msvc pkg "bothsuffixed.exe" || true
+  assert_contains "an exact .exe name is used as given" "$PKG_ENTRIES" "bothsuffixed.exe"
+
+  # Neither present: the error has to name both spellings, or the reader has
+  # to guess which the action tried.
+  TARGET=x86_64-pc-windows-msvc pkg "nowhere" || true
+  assert_contains "a missing binary names both spellings" "$PKG_LOG" \
+    "nowhere does not exist, nor nowhere.exe"
+  TARGET=x86_64-unknown-linux-gnu pkg "nowhere" || true
+  assert_contains "a missing file on Linux names one spelling" "$PKG_LOG" \
+    "nowhere does not exist"
+  assert_lacks "no .exe offered on Linux" "$PKG_LOG" "nowhere.exe"
+
+  # A Windows target must not fall back to a file that only exists without the
+  # suffix, which would ship the wrong artifact.
+  TARGET=x86_64-pc-windows-msvc pkg "extra" || true
+  assert_contains "a directory source is unaffected by the suffix" "$PKG_ENTRIES" \
+    "rsrpc-0.29.0-x86_64-pc-windows-msvc/extra/nested.txt"
 
   # Bad input is rejected before anything is written.
   pkg "missing-file" || true
