@@ -1,0 +1,72 @@
+name: Scan
+
+# Reusable scan bundle. Consumers call it as a job and get every scan back as
+# its own status check, running in parallel on separate runners — a composite
+# action could not do that, since its steps share one runner and so would
+# serialise.
+#
+#   scan:
+#     uses: Delnegend/actions/.github/workflows/scan.yml@<sha>
+#     permissions:
+#       contents: read
+#     with:
+#       scans: actionlint semgrep trivy
+
+on:
+  workflow_call:
+    inputs:
+      scans:
+        description: >-
+          Scans to run, from actionlint, semgrep, trivy and osv. Narrow it for
+          a project with no lockfile, where OSV-Scanner has nothing to scan.
+        type: string
+        default: actionlint semgrep trivy osv
+  workflow_dispatch:
+    inputs:
+      scans:
+        description: Scans to run.
+        type: string
+        default: actionlint semgrep trivy osv
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Workflow lint (actionlint)
+    if: contains(inputs.scans, 'actionlint')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Pinned, unlike the scans below which float on :latest. actionlint gains
+      # checks between releases, so a floating tag can fail an unrelated commit
+      # when a new rule lands.
+      - name: Run actionlint
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo rhysd/actionlint:1.7.12
+
+  semgrep:
+    name: SAST (Semgrep)
+    if: contains(inputs.scans, 'semgrep')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Run Semgrep
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" returntocorp/semgrep semgrep scan --config=auto --error
+
+  trivy:
+    name: Misconfig & Vulns (Trivy)
+    if: contains(inputs.scans, 'trivy')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Run Trivy
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" aquasec/trivy fs /src --severity HIGH,CRITICAL --scanners vuln,misconfig --exit-code 1
+
+  osv:
+    name: Dependencies (OSV-Scanner)
+    if: contains(inputs.scans, 'osv')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Run OSV-Scanner
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" ghcr.io/google/osv-scanner:latest --recursive /src
