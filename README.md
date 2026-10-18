@@ -1,23 +1,25 @@
+<div align="center">
+
 # actions
 
-Shared composite actions for the release pipeline used across
-[Delnegend](https://github.com/Delnegend)'s projects.
+**Shared composite actions for Delnegend's release pipeline, pinned by SHA across ten projects so a release fix lands once instead of in ten copies.**
 
-One implementation of the release decision logic, pinned by SHA in every
-consumer, so a fix lands once instead of in ten copies.
+[![Release](https://img.shields.io/github/v/release/Delnegend/actions?style=flat-square)](https://github.com/Delnegend/actions/releases)
+[![License](https://img.shields.io/github/license/Delnegend/actions?style=flat-square)](LICENSE)
 
-## Actions
+</div>
 
-### `resolve-release`
+---
 
-Decides what a release run should do, then does it. Runs inside the caller's
-`prepare` job, against the checkout the caller already made, and reports what
-the build job should do.
+## Quick Start
+
+Reference the action by commit SHA, and forward the step outputs your build
+job reads:
 
 ```yaml
 - name: Bump, tag, and push
   id: resolve
-  uses: Delnegend/actions/resolve-release@<sha> # v1
+  uses: Delnegend/actions/resolve-release@1299339be1f82a70f2580c26c82f5a6925b99dc4 # v1
   with:
     ref: ${{ inputs.ref }}
     dry-run: ${{ inputs.dry-run }}
@@ -28,20 +30,26 @@ the build job should do.
     semver-next-strict: ${{ steps.semver.outputs.nextStrict }}
 ```
 
-The job then forwards the outputs:
+Pin a full commit SHA, never a tag — the same discipline the rest of the
+pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 
-```yaml
-outputs:
-  ref: ${{ steps.resolve.outputs.ref }}
-  version: ${{ steps.resolve.outputs.version }}
-  publish: ${{ steps.resolve.outputs.publish }}
-  skip: ${{ steps.resolve.outputs.skip }}
-```
+## What's Inside
 
-#### Dispatch modes
+| Action | Purpose |
+|---|---|
+| [`resolve-release`](resolve-release/action.yml) | Decides what a release run does, then does it. |
 
-`ref` selects one of four behaviours. An unrecognised value fails the run
-rather than quietly doing nothing.
+## Highlights
+
+- **Four dispatch modes, one step** — ship a new version, test-build a commit, rebuild an existing tag, or preview — selected by the `ref` input.
+- **Never ships ungated code** — if the branch moves while CI runs, the release refuses rather than publishing a commit nothing checked.
+- **A preview never mutates** — dry-run exits before any tag, commit, or push, on every path.
+- **Recovers a lost tag** — a run that pushed its bump then died before tagging is completed, not silently skipped.
+
+## Dispatch Modes
+
+`ref` selects the behaviour. An unrecognised value fails the run rather than
+quietly doing nothing.
 
 | `ref` | Behaviour | `publish` |
 |---|---|---|
@@ -50,68 +58,16 @@ rather than quietly doing nothing.
 | `vX.Y.Z` | rebuild and publish an existing tag | `true` |
 | `dry-run: true` | print what would happen, mutate nothing | `false` |
 
-#### Outputs
+## Configuration
 
-| Output | Meaning |
-|---|---|
-| `ref` | what the build job checks out — a tag, or a SHA for a test-build |
-| `version` | version being released, no `v` prefix |
-| `publish` | `true` when this run should create a release |
-| `skip` | `true` when there is nothing to build |
+Every input, output, and the manifest-less project variant:
+**[`docs/configuration.md`](docs/configuration.md)**.
 
-#### What it guarantees
+## Documentation
 
-- **Nothing ungated is released.** Shipping refuses if `HEAD` no longer matches
-  `gate-sha`, so a commit that landed while the gate ran is caught instead of
-  being published unreviewed.
-- **A dry run never mutates**, on any dispatch path.
-- **Nothing is published twice.** The calculated version must sort strictly
-  after the latest tag.
-- **A lost tag is recoverable.** If an earlier run pushed its bump commit and
-  died before tagging, that commit is not conventional and reads as "nothing to
-  release" — but the manifest is ahead of the latest tag, so the tag is what's
-  missing. The action tags the stranded commit instead of skipping it.
-
-#### Inputs
-
-| Input | Default | Purpose |
-|---|---|---|
-| `ref` | `""` | dispatch ref — empty, SHA, or tag |
-| `dry-run` | `false` | preview without mutating |
-| `gate-sha` | `""` | commit the CI gate approved |
-| `manifest-path` | `Cargo.toml` | source of truth for recovery; empty disables it |
-| `bump-command` | `just bump` | rewrites version files, new version as `$1`; empty means manifest-less |
-| `semver-bump` | `""` | bump type from `semver-action` |
-| `semver-current` | `""` | current version |
-| `semver-next` | `""` | next version, with `v` |
-| `semver-next-strict` | `""` | next version, without `v` |
-
-#### Manifest-less projects
-
-Where the version lives in the git tag alone, set `bump-command: ''` and
-`manifest-path: ''`. The action then tags `HEAD` directly and commits nothing:
-
-```yaml
-  with:
-    bump-command: ''
-    manifest-path: ''
-```
-
-#### Requirements
-
-The caller must have checked out with `fetch-depth: 0` and
-`persist-credentials: true` — the action reads the full tag history and pushes
-the commit and tag using the checkout's credentials. It needs `contents: write`.
-
-## Versioning
-
-Tag releases `v1`, `v2`, … Consumers pin a full commit SHA with the tag in a
-trailing comment, matching the pinning used for every other action:
-
-```yaml
-uses: Delnegend/actions/resolve-release@e5d31409a69d06622f1647914a5c85bc755f6b3 # v1
-```
+- **[Configuration](docs/configuration.md)** — full input and output reference.
+- **[Development](docs/development.md)** — adding an action, testing it, versioning and pinning.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE)
