@@ -41,12 +41,18 @@ Environment, set by the action wrapper:
 Results are appended to $GITHUB_OUTPUT.
 """
 
+import errno
 import os
 import shutil
 import sys
 import tarfile
 import zipfile
 from pathlib import Path
+
+# Raised when a filesystem cannot support the request at all, as opposed to
+# the operation being refused for this path. Not present on every Python the
+# runners ship, hence the fallback.
+NotSupportedError = getattr(errno, "NotSupportedError", OSError)
 
 # One archive format per platform, chosen here and not at the call site.
 #
@@ -151,7 +157,14 @@ def stage(sources, outdir, stem):
     epoch = int(os.environ.get("SOURCE_DATE_EPOCH") or "0")
     epoch = max(epoch, ZIP_EPOCH)
     for path in sorted(stage_dir.rglob("*")) + [stage_dir]:
-        os.utime(path, (epoch, epoch), follow_symlinks=False)
+        try:
+            # follow_symlinks=False stamps the link itself rather than its
+            # target, which is what ends up in the archive. Windows has no
+            # support for the keyword and refuses it outright, so a refusal
+            # falls back to the same call without it.
+            os.utime(path, (epoch, epoch), follow_symlinks=False)
+        except (NotImplementedError, NotSupportedError):
+            os.utime(path, (epoch, epoch))
     return stage_dir
 
 

@@ -266,6 +266,54 @@ for node in ast.walk(tree):
 " "$SCRIPT"
 }
 
+# Package once with UTIME_FOLLOW forced off, standing in for the Windows
+# runner. Copies the script so the real one is not edited.
+pkg_works_without_symlink_following() {
+  local d; d="$(mktemp -d)"
+  cp "$SCRIPT" "$d/pa.py"
+  python3 - "$d/pa.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+# Stand in for the Windows runner: utime refuses follow_symlinks, which is
+# what the zip path does there. Only the flag is forced off as well, so the
+# try/except still has to be what saves the step.
+# Windows os.utime has no follow_symlinks support: shutil copystat therefore
+  # drops the keyword rather than passing it (see its lookup() helper, which
+  # falls back to a no-op when os.name is not in os.supports_follow_symlinks).
+  # So stand in for Windows by removing utime from that set and giving it a
+  # two-argument signature, which is exactly the surface Windows exposes.
+# Windows os.utime raises on the follow_symlinks keyword, which is what the
+  # Windows build of this action hit. Stand in for it by rejecting the keyword,
+  # so the retry without it is what keeps the step alive.
+s = s.replace('import errno\nimport os', 'import errno\nimport os\n\n_real_utime = os.utime')
+s = s.replace('def env(name, default=""):',
+              '_UNSET = object()\n\n\n'
+              'def _win_utime(path, times=(), *, ns=None, dir_fd=None, follow_symlinks=False):\n'
+              '    # Windows can follow a regular file and stamps it normally; it\n'
+              '    # refuses only when following would cross a symlink.\n'
+              '    if follow_symlinks and os.path.islink(path):\n'
+              '        raise NotImplementedError("utime: follow_symlinks unavailable")\n'
+              '    if ns is not None:\n'
+              '        return _real_utime(path, ns=ns, dir_fd=dir_fd, follow_symlinks=False)\n'
+              '    return _real_utime(path, times, dir_fd=dir_fd, follow_symlinks=False)\n\n'
+              'os.utime = _win_utime\n\n\n'
+              'def env(name, default=""):')
+s = s.replace('import errno\nimport os', 'import errno\nimport os\n\n_real_utime = os.utime')
+p.write_text(s)
+PY
+  ( cd "$d" && mkdir -p pkg && printf '#!/bin/sh\n' >pkg/app.sh && chmod +x pkg/app.sh && \
+    ln -s app.sh pkg/link.sh && \
+    GITHUB_OUTPUT="$d/o" env SOURCE=pkg OUTDIR=out NAME=t VERSION=1.0.0 \
+      TARGET=t RUNNER_OS=Windows_NT PYTHONDONTWRITEBYTECODE=1 \
+      python3 "$d/pa.py" >"$d/log" 2>&1 )
+  
+  local st=$?
+  [ "$st" -eq 0 ] && [ -f "$d/out/t-1.0.0-t.zip" ]
+  local rc=$?
+  PKG_WORK="$d"
+  return $rc
+}
+
 # Run the action over binary-like input, then compare the archive it produced
 # against the same payload packed at a lower effort setting. The action's own
 # output is what gets measured, so lowering its constant is what makes this
@@ -362,6 +410,16 @@ test_package_artifact() {
 
   # Extraction must not scatter files, and the staging copy must not survive.
   assert_eq "staging dir is cleaned up" "$PKG_STAGED" ""
+
+  # The zip path runs on Windows, where os.utime cannot follow a symlink. The
+  # staging loop must survive that rather than aborting the whole step, so
+  # exercise it with follow_symlinks off — which is what Windows gets.
+  if pkg_works_without_symlink_following; then
+    ok "packaging survives a platform that cannot follow symlinks"
+  else
+    bad "packaging survives a platform that cannot follow symlinks" \
+        "$(tail -2 "$PKG_WORK/log" 2>/dev/null | sed 's/^/          /')"
+  fi
 
   # upload-artifact strips the executable bit, so it has to live in the archive.
   assert_eq "executable bit is recorded in tar.xz" "$PKG_MODE" "0755"
