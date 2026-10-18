@@ -21,12 +21,32 @@ on:
           a project with no lockfile, where OSV-Scanner has nothing to scan.
         type: string
         default: actionlint semgrep trivy osv
+      trivy-scanners:
+        description: >-
+          Scanners Trivy runs. Empty means Trivy's own default, which is
+          vuln,secret and excludes misconfiguration.
+        type: string
+        default: vuln,misconfig
+      osv-config:
+        description: >-
+          OSV-Scanner config file at the repository root, for a project that
+          quarantines an advisory the daily upgrade cannot yet fix.
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       scans:
         description: Scans to run.
         type: string
         default: actionlint semgrep trivy osv
+      trivy-scanners:
+        description: Scanners Trivy runs.
+        type: string
+        default: vuln,misconfig
+      osv-config:
+        description: OSV-Scanner config file at the repository root.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -59,8 +79,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # `-w /src` matters: Trivy reads .trivyignore from its working
+      # directory, not from the scan target, so a project with one only gets it
+      # applied when Trivy runs from inside the tree. Harmless otherwise.
       - name: Run Trivy
-        run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" aquasec/trivy fs /src --severity HIGH,CRITICAL --scanners vuln,misconfig --exit-code 1
+        run: >-
+          docker run --rm -w /src -v "${GITHUB_WORKSPACE}:/src" aquasec/trivy fs /src
+          --severity HIGH,CRITICAL
+          ${{ inputs.trivy-scanners && format('--scanners {0}', inputs.trivy-scanners) || '' }}
+          --exit-code 1
 
   osv:
     name: Dependencies (OSV-Scanner)
@@ -69,4 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run OSV-Scanner
-        run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" ghcr.io/google/osv-scanner:latest --recursive /src
+        run: >-
+          docker run --rm -v "${GITHUB_WORKSPACE}:/src" ghcr.io/google/osv-scanner:latest
+          ${{ inputs.osv-config && format('--config=/src/{0}', inputs.osv-config) || '' }}
+          --recursive /src
