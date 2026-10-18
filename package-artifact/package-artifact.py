@@ -34,9 +34,9 @@ Environment, set by the action wrapper:
   EXTRA       optional space-separated additional paths to include
   NAME        artifact base name, e.g. rsrpc
   VERSION     version being released, with or without a leading v
-  TARGET      platform slug, e.g. x86_64-unknown-linux-gnu
+  TARGET      target triple, e.g. x86_64-unknown-linux-gnu. Its OS component
+              selects the archive format, not the runner's.
   OUTDIR      directory to write the archive into
-  RUNNER_OS   the runner's OS, which selects the archive format
 
 Results are appended to $GITHUB_OUTPUT.
 """
@@ -54,7 +54,11 @@ from pathlib import Path
 # runners ship, hence the fallback.
 NotSupportedError = getattr(errno, "NotSupportedError", OSError)
 
-# One archive format per platform, chosen here and not at the call site.
+# One archive format per target platform, chosen here and not at the call site.
+#
+# Keyed on the target's OS component rather than runner.os: a matrix entry can
+# target Windows while building on a Linux runner (a mingw cross-build), and
+# keying on the runner would hand a Windows consumer a tar.xz.
 #
 # Windows gets zip because that is what a Windows user expects to double-click,
 # and because the Linuxbrew formulae that consume these archives reference zip
@@ -64,7 +68,11 @@ NotSupportedError = getattr(errno, "NotSupportedError", OSError)
 # The preset is -9 rather than -9e. Measured on a 4.7 MB release binary, -9e is
 # within 0.005% of -9 in size for about 5% more CPU, so the extra effort buys
 # nothing a consumer would notice while making the slowest runners slower.
-FORMAT = {"Windows_NT": "zip"}
+# The OS is not at a fixed index: `<arch>-<os>-<env>` for most targets but
+# `<arch>-<vendor>-<os>-<env>` for Windows ones. So the field is matched by
+# name instead of position.
+OS = {"windows", "linux", "darwin", "apple", "freebsd", "netbsd", "openbsd"}
+FORMAT = {"windows": "zip"}
 SUFFIX = {"zip": ".zip", "tar.xz": ".tar.xz"}
 COMPRESSION = {"zip": 9, "tar.xz": 9}
 # tarfile names the compression, not the format.
@@ -112,9 +120,16 @@ def check_component(value, label):
     return value
 
 
-def archive_format(runner):
-    """The format for this runner's platform. Not negotiable at the call site."""
-    return FORMAT.get(runner, "tar.xz")
+def archive_format(target):
+    """The format for the platform being built for. Not a call-site choice.
+
+    The OS field is matched by name, not position, because a Windows triple
+    carries a vendor field that a Unix one does not.
+    """
+    for field in target.lower().split("-"):
+        if field in OS:
+            return FORMAT.get(field, "tar.xz")
+    return "tar.xz"
 
 
 def collect():
@@ -227,7 +242,7 @@ def main():
     name = check_component(env("NAME"), "name")
     target = check_component(env("TARGET"), "target")
     version = normalise_version(env("VERSION"))
-    fmt = archive_format(env("RUNNER_OS"))
+    fmt = archive_format(target)
     sources = collect()
 
     stem = f"{name}-{version}-{target}"

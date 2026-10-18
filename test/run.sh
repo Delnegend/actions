@@ -232,7 +232,6 @@ pkg() {
     env SOURCE="$source" OUTDIR=out \
         NAME="${NAME-rsrpc}" VERSION="${VERSION-0.29.0}" \
         TARGET="${TARGET-x86_64-unknown-linux-gnu}" \
-        RUNNER_OS="${RUNNER_OS-Linux}" \
         "$@" python3 "$SCRIPT" >"$PKG_WORK/out.log" 2>&1
   )
   local st=$?
@@ -304,11 +303,10 @@ PY
   ( cd "$d" && mkdir -p pkg && printf '#!/bin/sh\n' >pkg/app.sh && chmod +x pkg/app.sh && \
     ln -s app.sh pkg/link.sh && \
     GITHUB_OUTPUT="$d/o" env SOURCE=pkg OUTDIR=out NAME=t VERSION=1.0.0 \
-      TARGET=t RUNNER_OS=Windows_NT PYTHONDONTWRITEBYTECODE=1 \
+      TARGET=x86_64-pc-windows-msvc PYTHONDONTWRITEBYTECODE=1 \
       python3 "$d/pa.py" >"$d/log" 2>&1 )
-  
   local st=$?
-  [ "$st" -eq 0 ] && [ -f "$d/out/t-1.0.0-t.zip" ]
+  [ "$st" -eq 0 ] && [ -f "$d/out/t-1.0.0-x86_64-pc-windows-msvc.zip" ]
   local rc=$?
   PKG_WORK="$d"
   return $rc
@@ -318,10 +316,10 @@ PY
 # against the same payload packed at a lower effort setting. The action's own
 # output is what gets measured, so lowering its constant is what makes this
 # fail.
-effort_zip() { effort_check Windows_NT zip "$1"; }
+effort_zip() { effort_check x86_64-pc-windows-msvc zip "$1"; }
 
 effort_check() {
-  local runner="$1" mode="$2" ref_effort="$3"
+  local tgt="$1" mode="$2" ref_effort="$3"
   local d; d="$(mktemp -d)"
   # Binary-like, and tuned so deflate's effort settings diverge the way they do
   # on a real compiled binary (on rsRPC's own binary, level 1 is ~9% larger
@@ -343,7 +341,7 @@ with open(sys.argv[1],'wb') as f:
   # where the gap is real and large enough to be unambiguous.
 
   ( cd "$d" && GITHUB_OUTPUT="$d/o" env SOURCE=payload OUTDIR=out \
-      NAME=eff VERSION=1.0.0 TARGET=t RUNNER_OS="$runner" \
+      NAME=eff VERSION=1.0.0 TARGET="$tgt" \
       python3 "$SCRIPT" >/dev/null 2>&1 )
 
   python3 - "$d" "$ref_effort" <<'PY'
@@ -435,22 +433,27 @@ test_package_artifact() {
   assert_contains "directory source is recursive" "$PKG_ENTRIES" \
     "rsrpc-0.29.0-x86_64-unknown-linux-gnu/extra/nested.txt"
 
-  # Format is decided by the platform and is not a caller choice.
-  RUNNER_OS=Windows_NT pkg "app.sh" || true
-  assert_eq "Windows gets zip" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
-  RUNNER_OS=Linux pkg "app.sh" || true
-  assert_eq "Linux gets tar.xz" "$PKG_ARCHIVE" \
+  # Format is decided by the target platform and is not a caller choice. The
+  # target decides, not the runner: a Windows target cross-built on Linux has
+  # to come out as zip or a Windows consumer gets a tar.xz.
+  TARGET=x86_64-pc-windows-msvc pkg "app.sh" || true
+  assert_eq "a Windows target gets zip" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-pc-windows-msvc.zip"
+  TARGET=i686-pc-windows-gnu pkg "app.sh" || true
+  assert_eq "a mingw Windows target gets zip" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-i686-pc-windows-gnu.zip"
+  TARGET=aarch64-apple-darwin pkg "app.sh" || true
+  assert_eq "an Apple target gets tar.xz" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-aarch64-apple-darwin.tar.xz"
+  TARGET=x86_64-unknown-linux-gnu pkg "app.sh" || true
+  assert_eq "a Linux target gets tar.xz" "$PKG_ARCHIVE" \
     "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
-  RUNNER_OS=macOS pkg "app.sh" || true
-  assert_eq "macOS gets tar.xz" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
-  RUNNER_OS= pkg "app.sh" || true
-  assert_eq "an unset runner OS still gets tar.xz" "$PKG_ARCHIVE" \
-    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
+  TARGET=x86_64-unknown-freebsd pkg "app.sh" || true
+  assert_eq "an unlisted target gets tar.xz" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-freebsd.tar.xz"
 
   # The executable bit has to survive zip as well as tar.
-  RUNNER_OS=Windows_NT pkg "app.sh" || true
+  TARGET=x86_64-pc-windows-msvc pkg "app.sh" || true
   assert_eq "executable bit is recorded in zip" "$PKG_MODE" "0755"
 
   # Compression effort is download bandwidth for every consumer, so it is
@@ -486,12 +489,12 @@ test_package_artifact() {
   # Rebuilding must replace rather than append, and be byte-identical so a
   # rebuilt tag does not look like different artifacts to a consumer. Tar
   # records mtimes, so this only holds because staging normalises them.
-  RUNNER_OS=Windows_NT pkg "app.sh" || true
+  TARGET=x86_64-pc-windows-msvc pkg "app.sh" || true
   local zfirst; zfirst="$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)"
   rm -f "$PKG_WORK/out.outputs"
   ( cd "$PKG_WORK" && sleep 1 && GITHUB_OUTPUT="$PKG_WORK/out.outputs" env SOURCE=app.sh \
       OUTDIR=out NAME=rsrpc VERSION=0.29.0 TARGET=x86_64-unknown-linux-gnu \
-      RUNNER_OS=Windows_NT python3 "$SCRIPT" >/dev/null 2>&1 )
+      TARGET=x86_64-pc-windows-msvc python3 "$SCRIPT" >/dev/null 2>&1 )
   assert_eq "zip rebuild is byte-identical too" \
     "$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)" "$zfirst"
 
@@ -501,7 +504,7 @@ test_package_artifact() {
   rm -f "$PKG_WORK/out.outputs"
   ( cd "$PKG_WORK" && sleep 1 && GITHUB_OUTPUT="$PKG_WORK/out.outputs" env SOURCE=app.sh \
       OUTDIR=out NAME=rsrpc VERSION=0.29.0 TARGET=x86_64-unknown-linux-gnu \
-      RUNNER_OS=Linux python3 "$SCRIPT" >/dev/null 2>&1 )
+      TARGET=x86_64-unknown-linux-gnu python3 "$SCRIPT" >/dev/null 2>&1 )
   local second; second="$(sha256sum "$PKG_WORK/out/$PKG_ARCHIVE" | cut -d' ' -f1)"
   assert_eq "rebuild is byte-identical, not appended" "$second" "$first"
 

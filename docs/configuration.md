@@ -143,14 +143,13 @@ tap.
 | | Choice | Why |
 |---|---|---|
 | Name | `<name>-<version>-<target>.<ext>` | Version-stamped, so a consumer can match a release asset without hardcoding a target triple. |
-| Format | `zip` on Windows, `tar.xz` elsewhere | Zip is what a Windows user double-clicks; xz is materially smaller on compiled binaries and tar is what a Unix user reaches for. |
+| Format | `zip` for a Windows target, `tar.xz` otherwise | Zip is what a Windows user double-clicks; xz is materially smaller on compiled binaries and tar is what a Unix user reaches for. Chosen from the **target's** OS field, not `runner.os`, because a Windows target can be cross-built on a Linux runner. |
 | Effort | Maximum for the chosen format | Download bandwidth for every consumer. |
 | Layout | One directory named after the archive | Extraction produces a single folder instead of scattering files. |
 | Mode | Recorded inside the archive | `download-artifact` strips it, so restoring it afterwards is restoring what the archive lost on the way out. |
 
-The format is chosen from the runner's OS, so a matrix entry building the same
-target on two platforms would produce different extensions. Each matrix entry
-targets one platform, which is the case the release workflows use.
+The format follows the target, so the same build produces the same extension
+regardless of which runner compiled it.
 
 ### Outputs
 

@@ -47,7 +47,7 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 - **A preview never mutates** — dry-run exits before any tag, commit, or push, on every path.
 - **Recovers a lost tag** — a run that pushed its bump then died before tagging is completed, not silently skipped.
 - **One archive name across every project** — `<name>-<version>-<target>.<ext>`, version-stamped so a formula or script can match it without hardcoding a target triple.
-- **Format and layout are not call-site inputs** — zip on Windows, tar.xz elsewhere, both at maximum effort, one directory, decided once in one place.
+- **Format and layout are not call-site inputs** — zip for a Windows target, tar.xz otherwise, both at maximum effort, one directory, decided once in one place.
 - **The executable bit survives the round trip** — `download-artifact` strips it, so it is recorded inside the archive rather than restored afterwards.
 - **Reproducible** — timestamps are normalised, so rebuilding a tag produces byte-identical archives.
 

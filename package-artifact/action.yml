@@ -59,7 +59,6 @@ runs:
         VERSION: ${{ inputs.version }}
         TARGET: ${{ inputs.target }}
         OUTDIR: ${{ inputs.output-dir }}
-        RUNNER_OS: ${{ runner.os }}
       run: python3 "$GITHUB_ACTION_PATH/package-artifact.py"
 
     # The archive is uploaded under its final release name, so the Actions run
