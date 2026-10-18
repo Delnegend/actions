@@ -188,12 +188,198 @@ test_resolve_release() {
 
 # ---------------------------------------------------------------------------
 
+# Describe a zip: one "<octal mode> <member>" line per entry.
+# Python rather than `unzip -Z`, which is not part of the toolset these tests
+# are allowed to rely on.
+zip_entries() {
+  python3 - "$1" <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    for i in z.infolist():
+        print(f"{(i.external_attr >> 16) & 0o7777:04o} {i.filename}")
+PY
+}
+
+# Package a fixture in a throwaway directory and describe what came out.
+#
+# pkg <source> [env…] sets:
+#   PKG_ARCHIVE  archive file name, or empty when nothing was produced
+#   PKG_STEM     the name-version-target stem
+#   PKG_ENTRIES  archive members, one per line
+#   PKG_MODE     mode of app.sh inside the archive, or "none"
+#   PKG_STAGED   files left behind in the output directory, one per line
+pkg() {
+  local source="$1"; shift
+  PKG_WORK="$(mktemp -d)"
+  mkdir -p "$PKG_WORK/out"
+  (
+    cd "$PKG_WORK" || exit 2
+    # Fixture: an executable, a plain file, and a directory with one of each.
+    printf '#!/bin/sh\necho hi\n' >app.sh && chmod +x app.sh
+    printf 'licence\n' >LICENSE
+    mkdir -p extra && printf 'x\n' >extra/nested.txt
+
+    GITHUB_OUTPUT="$PKG_WORK/out.outputs" \
+    env SOURCE="$source" OUTDIR=out \
+        NAME="${NAME-rsrpc}" VERSION="${VERSION-0.29.0}" \
+        TARGET="${TARGET-x86_64-unknown-linux-gnu}" \
+        FORMAT="${FORMAT-zip}" LAYOUT="${LAYOUT-dir}" RUNNER_OS="${RUNNER_OS-Linux}" \
+        "$@" python3 "$SCRIPT" >"$PKG_WORK/out.log" 2>&1
+  )
+  local st=$?
+
+  PKG_ARCHIVE=""; PKG_STEM=""; PKG_ENTRIES=""; PKG_MODE="none"; PKG_STAGED=""
+  if [ "$st" -eq 0 ] && [ -f "$PKG_WORK/out.outputs" ]; then
+    PKG_ARCHIVE="$(grep -m1 '^archive=' "$PKG_WORK/out.outputs" | cut -d= -f2-)"
+    PKG_STEM="$(grep -m1 '^stem=' "$PKG_WORK/out.outputs" | cut -d= -f2-)"
+    if [ -f "$PKG_WORK/out/$PKG_ARCHIVE" ]; then
+      local listing; listing="$(zip_entries "$PKG_WORK/out/$PKG_ARCHIVE" 2>/dev/null)"
+      PKG_ENTRIES="$(printf '%s\n' "$listing" | cut -d' ' -f2-)"
+      PKG_MODE="$(printf '%s\n' "$listing" | awk '$2 ~ /app\.sh$/ { print $1; exit }')"
+    fi
+    PKG_STAGED="$(cd "$PKG_WORK/out" && ls -A | grep -vx "$PKG_ARCHIVE" || true)"
+  fi
+  PKG_LOG="$(tail -3 "$PKG_WORK/out.log" 2>/dev/null)"
+  return $st
+}
+
+assert_eq() { # <what> <got> <want>
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "got:  $2" "want: $3"; fi
+}
+
+assert_contains() { # <what> <haystack> <needle>
+  case "$2" in
+    *"$3"*) ok "$1" ;;
+    *) bad "$1" "missing: $3" "in: $(printf '%s' "$2" | tr '\n' ' ')" ;;
+  esac
+}
+
+assert_lacks() { # <what> <haystack> <needle>
+  case "$2" in
+    *"$3"*) bad "$1" "unexpectedly present: $3" ;;
+    *) ok "$1" ;;
+  esac
+}
+
+test_package_artifact() {
+  local A=package-artifact/action.yml
+  local PY=package-artifact/package-artifact.py
+  [ -f "$A" ] || { echo "missing $A" >&2; exit 2; }
+  [ -f "$PY" ] || { echo "missing $PY" >&2; exit 2; }
+
+  python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$PY" \
+    || { echo "$PY does not parse" >&2; exit 2; }
+  grep -q 'package-artifact.py' "$A" \
+    || { echo "$A does not invoke $PY" >&2; exit 2; }
+  SCRIPT="$PWD/$PY"
+
+  echo "package-artifact"
+
+  # The name is the whole point: <name>-<version>-<target>, version stamped so
+  # a consumer can match it, which is what the Homebrew tap bot requires.
+  pkg "app.sh" || true
+  assert_eq "name is <name>-<version>-<target>.zip" \
+    "$PKG_ARCHIVE" "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
+  assert_eq "stem output matches" "$PKG_STEM" "rsrpc-0.29.0-x86_64-unknown-linux-gnu"
+
+  # A leading v must not leak into the archive name.
+  VERSION=v0.29.0 pkg "app.sh" || true
+  assert_eq "leading v is dropped" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
+
+  # Default layout keeps everything under one top-level directory.
+  assert_contains "layout=dir wraps in a directory" "$PKG_ENTRIES" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu/app.sh"
+
+  # Extraction must not scatter files, and the staging copy must not survive.
+  assert_eq "staging dir is cleaned up" "$PKG_STAGED" ""
+
+  # upload-artifact strips the executable bit, so it has to live in the archive.
+  assert_eq "executable bit is recorded in zip" "$PKG_MODE" "0755"
+
+  # flat is opt-out, and single-source only.
+  LAYOUT=flat pkg "extra" || true
+  assert_contains "layout=flat places at root" "$PKG_ENTRIES" "nested.txt"
+  pkg "app.sh" EXTRA="LICENSE" LAYOUT=flat || true
+  assert_contains "layout=flat refuses several sources" "$PKG_LOG" "use dir for several"
+
+  # EXTRA adds files to a single-source package, which is how a binary and its
+  # launcher script travel together.
+  pkg "app.sh" EXTRA="LICENSE" || true
+  assert_contains "EXTRA adds a second file" "$PKG_ENTRIES" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu/LICENSE"
+
+  # A directory source is packaged whole, recursively.
+  pkg "extra" || true
+  assert_contains "directory source is recursive" "$PKG_ENTRIES" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu/extra/nested.txt"
+
+  # Format selection: an explicit request always wins.
+  FORMAT=tar.gz pkg "app.sh" || true
+  assert_eq "tar.gz on request" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.gz"
+  FORMAT=tar.xz pkg "app.sh" || true
+  assert_eq "tar.xz on request" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.xz"
+  # ...and an empty format falls back to the runner's convention.
+  FORMAT= RUNNER_OS=Windows_NT pkg "app.sh" || true
+  assert_eq "zip is the Windows default" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.zip"
+  FORMAT= RUNNER_OS=Linux pkg "app.sh" || true
+  assert_eq "tar.gz is the non-Windows default" "$PKG_ARCHIVE" \
+    "rsrpc-0.29.0-x86_64-unknown-linux-gnu.tar.gz"
+
+  # tar has to keep the executable bit too, for the same reason.
+  FORMAT=tar.gz pkg "app.sh" || true
+  local tar_mode
+  tar_mode="$(tar -tvzf "$PKG_WORK/out/$PKG_ARCHIVE" 2>/dev/null \
+              | awk '$NF ~ /app\.sh$/ {print substr($1,2); exit}')"
+  assert_eq "executable bit is recorded in tar.gz" "$tar_mode" "rwxr-xr-x"
+
+  # Bad input is rejected before anything is written.
+  pkg "missing-file" || true
+  assert_eq "missing source produces nothing" "$PKG_ARCHIVE" ""
+  assert_contains "missing source explains itself" "$PKG_LOG" "does not exist"
+  pkg "" || true
+  assert_eq "empty source produces nothing" "$PKG_ARCHIVE" ""
+  assert_contains "empty source explains itself" "$PKG_LOG" "nothing to package"
+  NAME="" pkg "app.sh" || true
+  assert_contains "empty name fails" "$PKG_LOG" "name is required"
+  NAME="a/b" pkg "app.sh" || true
+  assert_contains "name rejects a path separator" "$PKG_LOG" "path separator"
+  TARGET="" pkg "app.sh" || true
+  assert_contains "empty target fails" "$PKG_LOG" "target is required"
+  FORMAT=rars pkg "app.sh" || true
+  assert_contains "unknown format fails" "$PKG_LOG" "is not one of"
+  LAYOUT=sideways pkg "app.sh" || true
+  assert_contains "unknown layout fails" "$PKG_LOG" "is not one of"
+  VERSION=latest pkg "app.sh" || true
+  assert_contains "non-numeric version fails" "$PKG_LOG" "does not start with a digit"
+
+  # Rebuilding in place must not grow the archive. This is inherent to the
+  # writers rather than to the action, so it is a guard against a future
+  # format switching to an appending mode rather than a claim about the code.
+  pkg "app.sh" || true
+  local first; first="$(wc -c <"$PKG_WORK/out/$PKG_ARCHIVE")"
+  rm -f "$PKG_WORK/out.outputs"
+  ( cd "$PKG_WORK" && GITHUB_OUTPUT="$PKG_WORK/out.outputs" env SOURCE=app.sh \
+      OUTDIR=out NAME=rsrpc VERSION=0.29.0 TARGET=x86_64-unknown-linux-gnu \
+      FORMAT=zip LAYOUT=dir RUNNER_OS=Linux python3 "$SCRIPT" >/dev/null 2>&1 )
+  local second; second="$(wc -c <"$PKG_WORK/out/$PKG_ARCHIVE")"
+  assert_eq "rebuild replaces rather than appends" "$second" "$first"
+
+  rm -rf "$PKG_WORK"
+}
+
+# ---------------------------------------------------------------------------
+
 targets=("$@")
-[ ${#targets[@]} -eq 0 ] && targets=(resolve-release)
+[ ${#targets[@]} -eq 0 ] && targets=(resolve-release package-artifact)
 
 for t in "${targets[@]}"; do
   case "$t" in
     resolve-release) test_resolve_release ;;
+    package-artifact) test_package_artifact ;;
     *) echo "unknown action: $t" >&2; exit 2 ;;
   esac
   printf '\n'

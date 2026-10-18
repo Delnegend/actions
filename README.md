@@ -38,6 +38,7 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 | Action | Purpose |
 |---|---|
 | [`resolve-release`](resolve-release/action.yml) | Decides what a release run does, then does it. |
+| [`package-artifact`](package-artifact/action.yml) | Stages, archives and uploads one build artifact under a consistent name. |
 
 ## Highlights
 
@@ -45,6 +46,8 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 - **Never ships ungated code** — if the branch moves while CI runs, the release refuses rather than publishing a commit nothing checked.
 - **A preview never mutates** — dry-run exits before any tag, commit, or push, on every path.
 - **Recovers a lost tag** — a run that pushed its bump then died before tagging is completed, not silently skipped.
+- **One archive name across every project** — `<name>-<version>-<target>.<ext>`, version-stamped so a formula or script can match it without hardcoding a target triple.
+- **The executable bit survives the round trip** — `download-artifact` strips it, so it is recorded inside the archive rather than restored afterwards.
 
 ## Dispatch Modes
 

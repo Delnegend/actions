@@ -1,0 +1,90 @@
+name: package-artifact
+description: >-
+  Stage, archive and upload one build artifact under a consistent name:
+  `<name>-<version>-<target>.<ext>`, with the executable bit recorded inside
+  the archive and a leading v on the version dropped.
+
+inputs:
+  source:
+    description: Path to a file or directory to package.
+    required: false
+    default: ""
+  extra:
+    description: Optional space-separated additional paths to include.
+    required: false
+    default: ""
+  name:
+    description: Artifact base name, e.g. rsrpc.
+    required: true
+  version:
+    description: >-
+      Version being released. A leading v is dropped, so v0.29.0 and 0.29.0
+      produce the same archive name.
+    required: true
+  target:
+    description: Platform slug, e.g. x86_64-unknown-linux-gnu.
+    required: true
+  format:
+    description: >-
+      zip | tar.gz | tar.xz | 7z. Empty picks zip on Windows and tar.gz
+      elsewhere.
+    required: false
+    default: ""
+  layout:
+    description: >-
+      dir puts everything under one top-level directory named after the
+      archive; flat places it at the archive root. Accepts a single source.
+    required: false
+    default: "dir"
+  output-dir:
+    description: Directory to write the archive into.
+    required: false
+    default: "dist"
+  upload:
+    description: Whether to upload the archive to the Actions run.
+    required: false
+    default: "true"
+  upload-action:
+    description: >-
+      actions/upload-artifact ref, pinned by the caller so a bump is a
+      deliberate repin rather than a silent change in a shared action.
+    required: false
+    default: "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7"
+
+outputs:
+  archive:
+    description: Archive file name.
+    value: ${{ steps.package.outputs.archive }}
+  path:
+    description: Path to the archive, relative to the workspace.
+    value: ${{ steps.package.outputs.path }}
+  stem:
+    description: The `<name>-<version>-<target>` stem the archive is named from.
+    value: ${{ steps.package.outputs.stem }}
+
+runs:
+  using: composite
+  steps:
+    - id: package
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        EXTRA: ${{ inputs.extra }}
+        NAME: ${{ inputs.name }}
+        VERSION: ${{ inputs.version }}
+        TARGET: ${{ inputs.target }}
+        FORMAT: ${{ inputs.format }}
+        LAYOUT: ${{ inputs.layout }}
+        OUTDIR: ${{ inputs.output-dir }}
+        RUNNER_OS: ${{ runner.os }}
+      run: python3 "$GITHUB_ACTION_PATH/package-artifact.py"
+
+    # The archive is uploaded under its final release name, so the Actions run
+    # and the release show the same string a consumer will fetch.
+    - name: Upload archive
+      if: inputs.upload == 'true'
+      uses: ${{ inputs.upload-action }}
+      with:
+        name: ${{ steps.package.outputs.stem }}
+        path: ${{ steps.package.outputs.path }}
+        if-no-files-found: error
