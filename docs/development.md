@@ -88,7 +88,7 @@ turns the suite red.
 
 - **Workflow lint** runs `actionlint` over `.github/workflows/`, the same
   command the consuming projects run.
-- **Tests** runs `./test/run.sh`, which is what actually verifies the actions.
+- **Tests** runs `./test/run.py`, which is what actually verifies the actions.
 
 actionlint cannot lint an `action.yml` on its own: it parses one as a
 *workflow* and reports `"jobs" section is missing`. Its action-metadata checks
