@@ -32,19 +32,25 @@ bad()  {
 
 # fixture <manifest-version> [tag]
 # Builds $WORK: a git repo on `main` with a tag, plus a bare `origin` so the
-# push paths can be exercised for real.
+# push paths can be exercised for real. manifest-version "TAG-ONLY" means no
+# Cargo.toml: `just version get` prints empty, i.e. version lives in tags.
 setup() {
   local manifest_ver="$1" want_tag="${2:-}" bin
   WORK="$(mktemp -d)"
   bin="$WORK/bin"; mkdir -p "$bin"
 
-  # A `just` stand-in: the real recipe rewrites version files, and the action
-  # requires the bump to change something.
+  # A `just` stand-in implementing the enforced `version` recipe contract:
+  # `just version get` prints X.Y.Z or empty, `just version bump X` rewrites.
   cat >"$bin/just" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-[ "${1:-}" = "bump" ] || { echo "stub just: unsupported" >&2; exit 1; }
-sed -i -E "s/^version = \".*\"/version = \"$2\"/" Cargo.toml
+[ "${1:-}" = "version" ] || { echo "stub just: unsupported (want 'version ...')" >&2; exit 1; }
+case "${2:-}" in
+  get) sed -n -E 's/^version = "(.*)"/\1/p' Cargo.toml 2>/dev/null | head -1 || true ;;
+  bump) [ -n "${3:-}" ] || { echo "stub just: version bump needs a version" >&2; exit 1; }
+        sed -i -E "s/^version = \".*\"/version = \"$3\"/" Cargo.toml ;;
+  *) echo "stub just: unsupported version subcommand" >&2; exit 1 ;;
+esac
 STUB
   chmod +x "$bin/just"
 
@@ -54,7 +60,11 @@ STUB
     cd "$WORK/repo"
     git config user.email t@t; git config user.name t
     git remote add origin "$WORK/origin.git"
-    printf 'name = "x"\nversion = "%s"\n' "$manifest_ver" >Cargo.toml
+    if [ "$manifest_ver" != "TAG-ONLY" ]; then
+      printf 'name = "x"\nversion = "%s"\n' "$manifest_ver" >Cargo.toml
+    else
+      printf 'tag-only fixture, no manifest\n' >README.md
+    fi
     git add -A; git commit -qm init
     git branch -M main
     git push -q -u origin main
@@ -119,8 +129,8 @@ test_resolve_release() {
   SCRIPT="$PWD/$PY"   # absolute: cases run with cwd inside a throwaway repo
 
   echo "resolve-release"
-  local BASE=(INPUT_REF= DRY_RUN=false GATE_SHA= MANIFEST_PATH=Cargo.toml
-              BUMP_COMMAND="just bump" BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT=)
+  local BASE=(INPUT_REF= DRY_RUN=false GATE_SHA=
+              BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT=)
 
   # Nothing releasable. NEXT is empty when semver-action returns before
   # setting `bump`, so it — not BUMP — is the reliable "nothing to ship" signal.
@@ -130,23 +140,23 @@ test_resolve_release() {
 
   # A dry run must never mutate, on any path.
   run "dry-run ship -> skip"          ok 1 0 DRY_RUN=true BUMP=patch CURRENT=v1.2.3 NEXT=v1.2.4 NEXT_STRICT=1.2.4 \
-                                       INPUT_REF= GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump"
+                                       INPUT_REF= GATE_SHA=
   run "dry-run sha -> skip"           ok 1 0 INPUT_REF=abc1234 DRY_RUN=true BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT= \
-                                       GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump"
+                                       GATE_SHA=
   run "dry-run tag -> skip"           ok 1 0 INPUT_REF=v1.2.3 DRY_RUN=true BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT= \
-                                       GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump"
+                                       GATE_SHA=
 
   # A malformed ref is rejected before anything mutates, dry-run included.
   # Spelled out rather than spliced from BASE: `env` applies assignments left
   # to right, so re-listing INPUT_REF= would silently win over the value above.
-  run "malformed ref -> fail"         fail 0 0 INPUT_REF=v1.2 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
-                                       BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT=
-  run "bad ref on dry-run -> fail"    fail 0 0 INPUT_REF="main" DRY_RUN=true GATE_SHA= MANIFEST_PATH=Cargo.toml \
-                                       BUMP_COMMAND="just bump" BUMP= CURRENT= NEXT= NEXT_STRICT=
+  run "malformed ref -> fail"         fail 0 0 INPUT_REF=v1.2 DRY_RUN=false GATE_SHA= \
+                                       BUMP= CURRENT= NEXT= NEXT_STRICT=
+  run "bad ref on dry-run -> fail"    fail 0 0 INPUT_REF="main" DRY_RUN=true GATE_SHA= \
+                                       BUMP= CURRENT= NEXT= NEXT_STRICT=
 
   # Commit test-builds never publish.
-  run "sha -> no publish"             ok 0 0 INPUT_REF=abc1234 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
-                                       BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT=
+  run "sha -> no publish"             ok 0 0 INPUT_REF=abc1234 DRY_RUN=false GATE_SHA= \
+                                       BUMP= CURRENT= NEXT= NEXT_STRICT=
 
   # The test-build version goes straight into an archive filename downstream,
   # so it has to be one package-artifact accepts. Asserted against that action
@@ -154,8 +164,8 @@ test_resolve_release() {
   setup "1.2.3" "v1.2.3"
   export GITHUB_OUTPUT="$WORK/out"
   local SHA_TEST
-  (cd "$WORK/repo" && env INPUT_REF=abc1234def5678 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
-       BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT= python3 "$SCRIPT") >/dev/null 2>&1
+  (cd "$WORK/repo" && env INPUT_REF=abc1234def5678 DRY_RUN=false GATE_SHA= \
+       BUMP= CURRENT= NEXT= NEXT_STRICT= python3 "$SCRIPT") >/dev/null 2>&1
   SHA_TEST="$(sed -n 's/^version=//p' "$GITHUB_OUTPUT" | head -1)"
   # Absolute, captured before the subshell changes directory.
   local PKG_PY="$PWD/package-artifact/package-artifact.py"
@@ -172,41 +182,59 @@ test_resolve_release() {
   teardown
 
   # Tag rebuild.
-  run "tag rebuild -> publish"        ok 0 1 INPUT_REF=v1.2.3 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
-                                       BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT=
-  run "missing tag -> fail"           fail 0 0 INPUT_REF=v9.9.9 DRY_RUN=false GATE_SHA= MANIFEST_PATH= \
-                                       BUMP_COMMAND= BUMP= CURRENT= NEXT= NEXT_STRICT=
+  run "tag rebuild -> publish"        ok 0 1 INPUT_REF=v1.2.3 DRY_RUN=false GATE_SHA= \
+                                       BUMP= CURRENT= NEXT= NEXT_STRICT=
+  run "missing tag -> fail"           fail 0 0 INPUT_REF=v9.9.9 DRY_RUN=false GATE_SHA= \
+                                       BUMP= CURRENT= NEXT= NEXT_STRICT=
 
   # Nothing ungated may ship.
-  run "gate sha mismatch -> fail"     fail 0 0 GATE_SHA=deadbeef MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump" \
+  run "gate sha mismatch -> fail"     fail 0 0 GATE_SHA=deadbeef \
                                        BUMP=patch CURRENT=v1.2.3 NEXT=v1.2.4 NEXT_STRICT=1.2.4 INPUT_REF= DRY_RUN=false
 
   # Never republish or go backwards.
-  run "next == latest -> fail"        fail 0 0 GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump" \
+  run "next == latest -> fail"        fail 0 0 GATE_SHA= \
                                        BUMP=patch CURRENT=v1.2.3 NEXT=v1.2.3 NEXT_STRICT=1.2.3 INPUT_REF= DRY_RUN=false
-  run "next < latest -> fail"         fail 0 0 GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump" \
+  run "next < latest -> fail"         fail 0 0 GATE_SHA= \
                                        BUMP=patch CURRENT=v1.2.3 NEXT=v1.0.0 NEXT_STRICT=1.0.0 INPUT_REF= DRY_RUN=false
 
   # The happy path: bump, commit, tag, push — with a real remote to push to.
   expect_remote_tag="v1.2.4"
-  run "ship -> bump, tag, push"       ok 0 1 GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump" \
+  run "ship -> bump, tag, push"       ok 0 1 GATE_SHA= \
                                        BUMP=patch CURRENT=v1.2.3 NEXT=v1.2.4 NEXT_STRICT=1.2.4 INPUT_REF= DRY_RUN=false
 
-  # Manifest-less projects tag HEAD and commit nothing.
-  expect_remote_tag="v1.2.4"
-  run "manifest-less -> tag only"     ok 0 1 GATE_SHA= MANIFEST_PATH= BUMP_COMMAND= \
+  # Empty version output fails loud: every repo must version a file.
+  expect_remote_tag=""
+  MV=TAG-ONLY run "empty version get -> fail" fail 0 0 GATE_SHA= \
                                        BUMP=patch CURRENT=v1.2.3 NEXT=v1.2.4 NEXT_STRICT=1.2.4 INPUT_REF= DRY_RUN=false
 
   # A stranded bump commit gets its tag rather than being skipped.
   expect_remote_tag="v9.9.9"
-  MV=9.9.9 run "manifest ahead -> tag stranded commit" ok 0 1 GATE_SHA= MANIFEST_PATH=Cargo.toml \
-                                       BUMP_COMMAND="just bump" BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT= \
+  MV=9.9.9 run "manifest ahead -> tag stranded commit" ok 0 1 GATE_SHA= \
+                                       BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT= \
                                        INPUT_REF= DRY_RUN=false
 
   # A manifest that is not ahead must not trigger recovery.
   expect_remote_tag=""
-  run "manifest level -> no recovery" ok 1 0 GATE_SHA= MANIFEST_PATH=Cargo.toml BUMP_COMMAND="just bump" \
+  run "manifest level -> no recovery" ok 1 0 GATE_SHA= \
                                        BUMP= CURRENT=v1.2.3 NEXT= NEXT_STRICT= INPUT_REF= DRY_RUN=false
+
+  # Fail fast when the `version` recipe is missing.
+  setup "1.2.3" "v1.2.3"
+  export GITHUB_OUTPUT="$WORK/out"
+  cat >"$WORK/bin/just" <<'BROKEN'
+#!/usr/bin/env bash
+echo "stub just: no version recipe" >&2; exit 1
+BROKEN
+  chmod +x "$WORK/bin/just"
+  local broken_out broken_st
+  broken_out="$(cd "$WORK/repo" && env INPUT_REF= DRY_RUN=false GATE_SHA= \
+    BUMP=patch CURRENT=v1.2.3 NEXT=v1.2.4 NEXT_STRICT=1.2.4 python3 "$SCRIPT" 2>&1)"; broken_st=$?
+  if [ "$broken_st" -ne 0 ] && printf '%s' "$broken_out" | grep -q "just version get"; then
+    ok "missing version recipe -> fail fast"
+  else
+    bad "missing version recipe -> fail fast" "exit=$broken_st" "$(printf '%s' "$broken_out" | tail -2)"
+  fi
+  teardown
 }
 
 # ---------------------------------------------------------------------------

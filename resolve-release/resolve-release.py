@@ -15,18 +15,20 @@ Environment, set by the `resolve-release` action wrapper:
     INPUT_REF    dispatch ref: empty, 7-64 hex, or vX.Y.Z
     DRY_RUN      "true" to preview without mutating anything
     GATE_SHA     commit the CI gate approved; shipping refuses if HEAD moved
-    MANIFEST_PATH  file holding the source-of-truth version; empty disables
-                   recovery
-    BUMP_COMMAND   command that rewrites the version files, given the new
-                   version as its first argument; empty means manifest-less
     BUMP, CURRENT, NEXT, NEXT_STRICT    outputs of ietf-tools/semver-action
+
+Version I/O is language-agnostic by convention. Every consumer must provide:
+
+    just version get        print X.Y.Z (no `v`)
+    just version bump X.Y.Z rewrite all manifests to X.Y.Z, no commit/tag
+
+Missing or empty output fails fast: every repo owns a version file.
 
 Results are appended to $GITHUB_OUTPUT.
 """
 
 import os
 import re
-import shlex
 import subprocess
 import sys
 
@@ -80,17 +82,41 @@ def latest_tag():
     return out.splitlines()[0] if out.splitlines() else ""
 
 
-def manifest_version(path):
-    """The version in the manifest's first `version = "…"` line, or ''."""
+def version_get():
+    """Version from `just version get` (X.Y.Z, no `v`).
+
+    Fail fast when `just` or the recipe is missing, or when it prints empty:
+    every repo owns a version file, so empty means a broken recipe.
+    """
     try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                match = re.match(r'^version\s*=\s*"([^"]+)"', line)
-                if match:
-                    return match.group(1)
-    except OSError:
-        return ""
-    return ""
+        out = subprocess.run(
+            ["just", "version", "get"],
+            check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        fail("`just` not found on PATH; the prepare job must install it.")
+    except subprocess.CalledProcessError as e:
+        fail(
+            "missing `just version get` recipe "
+            "(expected `version get:` to print X.Y.Z). "
+            f"just said: {e.stderr.strip() or e.stdout.strip()}"
+        )
+    return out.stdout.strip() or fail(
+        "`just version get` printed empty; every repo must version a file."
+    )
+
+
+def version_bump(next_strict):
+    """Rewrite all manifests to next_strict via `just version bump`."""
+    try:
+        subprocess.run(
+            ["just", "version", "bump", next_strict],
+            check=True, text=True,
+        )
+    except FileNotFoundError:
+        fail("`just` not found on PATH; the prepare job must install it.")
+    except subprocess.CalledProcessError as e:
+        fail(f"`just version bump {next_strict}` failed with exit {e.returncode}.")
 
 
 def classify_ref(ref):
@@ -138,10 +164,9 @@ def recover_stranded_bump(latest):
     to release — but the manifest is ahead of the latest tag, so the tag is
     what is missing.
     """
-    path = env("MANIFEST_PATH")
-    if not path or not latest:
+    if not latest:
         return False
-    version = manifest_version(path)
+    version = version_get()
     parsed = parse_version(version)
     if not parsed or parsed <= parse_version(latest):
         return False
@@ -180,26 +205,18 @@ def ship():
     git("config", "user.name", BOT_NAME)
     git("config", "user.email", BOT_EMAIL)
 
-    bump_command = env("BUMP_COMMAND")
-    if not bump_command:
-        # Manifest-less project: the tag is the version, so HEAD is tagged
-        # directly and nothing is committed.
-        print(f"No bump command; tagging HEAD as {next_tag}.")
-        git("tag", "-a", next_tag, "-m", f"Release {next_tag}")
-        git("push", "origin", f"refs/tags/{next_tag}")
-    else:
-        subprocess.run([*shlex.split(bump_command), next_strict], check=True)
-        git("add", "-u")
-        if git_ok("diff", "--staged", "--quiet"):
-            fail("bump produced no change in package files")
-        git("commit", "-m", f"chore(release): {next_tag}")
-        # Commit first: a failed tag push is recoverable from the manifest,
-        # a lost commit is not.
-        git("push", "origin", "HEAD:main")
-        if git_ok("rev-parse", "-q", "--verify", f"refs/tags/{next_tag}"):
-            fail(f"tag {next_tag} already exists")
-        git("tag", "-a", next_tag, "-m", f"Release {next_tag}")
-        git("push", "origin", f"refs/tags/{next_tag}")
+    version_bump(next_strict)
+    git("add", "-u")
+    if git_ok("diff", "--staged", "--quiet"):
+        fail("bump produced no change in package files")
+    git("commit", "-m", f"chore(release): {next_tag}")
+    # Commit first: a failed tag push is recoverable from the manifest,
+    # a lost commit is not.
+    git("push", "origin", "HEAD:main")
+    if git_ok("rev-parse", "-q", "--verify", f"refs/tags/{next_tag}"):
+        fail(f"tag {next_tag} already exists")
+    git("tag", "-a", next_tag, "-m", f"Release {next_tag}")
+    git("push", "origin", f"refs/tags/{next_tag}")
 
     emit(ref=next_tag, version=next_strict, publish="true", skip="false")
 

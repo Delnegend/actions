@@ -24,19 +24,6 @@ inputs:
       pins its own commit.
     required: false
     default: ""
-  manifest-path:
-    description: >-
-      Manifest whose version is the source of truth, used to recover a run that
-      pushed its bump commit but died before tagging. Empty disables recovery.
-    required: false
-    default: Cargo.toml
-  bump-command:
-    description: >-
-      Command that rewrites the version files; the new version is passed as its
-      first argument. Empty for a manifest-less project, where the version lives
-      in the git tag alone and HEAD is tagged without a commit.
-    required: false
-    default: just bump
   semver-bump:
     description: "Bump type from ietf-tools/semver-action."
     required: false
@@ -78,8 +65,6 @@ runs:
         INPUT_REF: ${{ inputs.ref }}
         DRY_RUN: ${{ inputs.dry-run }}
         GATE_SHA: ${{ inputs.gate-sha }}
-        MANIFEST_PATH: ${{ inputs.manifest-path }}
-        BUMP_COMMAND: ${{ inputs.bump-command }}
         BUMP: ${{ inputs.semver-bump }}
         CURRENT: ${{ inputs.semver-current }}
         NEXT: ${{ inputs.semver-next }}

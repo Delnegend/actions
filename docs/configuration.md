@@ -36,16 +36,27 @@ The semver outputs are inputs to this action, so the workflow must run
 | `semver-next` | `""` | Next version including the `v` prefix. |
 | `semver-next-strict` | `""` | Next version without the `v` prefix. |
 
-#### The two project-specific inputs
+#### The `version` recipe contract (language-agnostic)
 
-`manifest-path` and `bump-command` are the only values that differ between
-projects; everything else is the same call.
+The action holds no per-language parsing. Every consumer must provide:
 
-| Project shape | `manifest-path` | `bump-command` |
+```just
+# print X.Y.Z (no `v`), or empty for tag-only repos
+version get:
+  ...
+
+# rewrite all manifests to $1, no commit/tag
+version bump ver:
+  ...
+```
+
+| Project shape | `just version get` | `just version bump` |
 |---|---|---|
-| Version in `Cargo.toml` | `Cargo.toml` | `just bump` |
-| Version in a `VERSION` file | `VERSION` | `just bump` |
-| Version only in the git tag | `''` | `''` |
+| Version in `Cargo.toml` | parse `workspace.package` or `package` version | `sed` + `cargo check`/`cargo update -w` |
+| Version in `VERSION` | `cat VERSION` | `printf` to `VERSION` |
+| Dual `Cargo.toml` + `package.json` | read `Cargo.toml` (single truth) | update both files |
+
+Missing or empty output fails fast.
 
 ### Outputs
 
@@ -86,8 +97,8 @@ is not conventional — it reads as "nothing to release" to the next run, which
 would then skip. But the manifest is ahead of the latest tag, so the tag is
 what is missing. The action tags the stranded commit instead.
 
-Requires `manifest-path` to name a real file with a `version = "…"` line, and
-at least one existing `v*` tag. Set `manifest-path: ''` to disable.
+Requires `just version get` to print a version ahead of the latest `v*` tag.
+Tag-only repos (empty `get`) skip recovery.
 
 #### Nothing is published twice
 
@@ -103,7 +114,7 @@ The caller must provide:
   the action reads the full tag history and pushes the commit and tag with the
   checkout's credentials.
 - `contents: write` on the job.
-- `just` on `PATH` when `bump-command` is set.
+- `just` on `PATH` with `version get` / `version bump` recipes.
 ## package-artifact
 
 ### How it fits together
