@@ -1,7 +1,8 @@
 name: Dependency updates (reusable)
 
-# Scheduled upgrade PRs with the 14-day publish quarantine. Pick the
-# ecosystem with inputs; the label/PR flow is identical everywhere:
+# Scheduled upgrade PRs with the 14-day publish quarantine. Every toolchain
+# is opt-in: a caller names the ones it wants, and what it does not name is
+# not touched. The label/PR flow is identical everywhere:
 #
 #   update:
 #     uses: Delnegend/actions/.github/workflows/reusable-deps-update.yml@<sha>
@@ -10,8 +11,8 @@ name: Dependency updates (reusable)
 #       bun: true
 #       bun-dir: frontend
 #
-# Frozen-blob repos (no manifest to upgrade) call it with both false and get
-# the same daily no-op check plus Dependabot coverage.
+# Frozen-blob repos (no manifest to upgrade) name neither, and get the same
+# daily no-op check plus Dependabot coverage.
 
 on:
   workflow_call:
@@ -19,7 +20,7 @@ on:
       cargo:
         description: Run cargo update behind the registry cooldown.
         type: boolean
-        default: true
+        default: false
       bun:
         description: Run bun update behind the bunfig.toml cooldown.
         type: boolean
