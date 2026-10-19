@@ -42,30 +42,45 @@ with a `# vN` comment.
 
 ## Testing
 
-`./test/run.sh` extracts the `run:` block from an action and drives it against
-throwaway git repositories with environment variables standing in for the
-action inputs. Outputs are read from `$GITHUB_OUTPUT` exactly as the runner
-would. `CI` runs it on every push and pull request.
+`./test/run.py` drives each action's script against throwaway git
+repositories with environment variables standing in for the action inputs.
+Outputs are read from `$GITHUB_OUTPUT` exactly as the runner would. `CI` runs
+it on every push and pull request.
 
 ```bash
-./test/run.sh                 # every action
-./test/run.sh resolve-release # one action
+./test/run.py                 # every suite
+./test/run.py resolve-release # one suite
 ```
 
-Run it locally before pushing — it needs only bash, git and awk, and takes
-about a minute. Each case sets up a repo with a bare `origin` and a stub
-`just`, so the push paths are exercised for real rather than mocked: a case
-can assert the tag actually landed on the remote.
+The suites are one file per action, over a shared harness:
 
-Two traps worth knowing, both hit while writing these tests:
+```
+test/
+  run.py                  # entry point: run the suites, count the outcomes
+  harness.py              # fixtures, subprocess driving, assertions
+  test_resolve_release.py
+  test_package_artifact.py
+```
 
-- `grep -c` exits non-zero when it finds nothing, so `n=$(grep -c x f || echo 0)`
-  yields `"0\n0"` and every assertion silently mismatches.
+Run it locally before pushing — it needs python3 and git, and takes about a
+minute. Each case sets up a repo with a bare `origin` and a stub `just`, so
+the push paths are exercised for real rather than mocked: a case can assert
+the tag actually landed on the remote.
+
+Two things worth knowing, both hit while writing these tests:
+
 - The fixtures must match what the action actually reads. A `Cargo.toml`
-  written as JSON on one line will not match `grep -m1 '^version = '`.
+  written as JSON on one line will not match the version the action reads.
+- A platform that behaves differently is simulated with a `sitecustomize.py`
+  on `PYTHONPATH`, not by rewriting the action's source. Rewriting the source
+  couples the test to the action's exact text, and the action then has to be
+  edited to keep the test meaningful.
 
 Mutate the action before trusting a green run — change the skip guard and
-confirm the suite goes red. A test that cannot fail proves nothing.
+confirm the suite goes red. A test that cannot fail proves nothing. The
+suites were checked against a broken skip guard, a broken archive name, a
+dropped executable bit and a removed platform fallback, and each of those
+turns the suite red.
 
 ## Linting
 

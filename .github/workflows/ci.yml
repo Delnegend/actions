@@ -26,7 +26,7 @@ jobs:
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo rhysd/actionlint:1.7.12
 
   tests:
-    name: Tests (resolve-release)
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,4 +34,4 @@ jobs:
       - name: Configure git
         run: git config --global user.email ci@example.com && git config --global user.name CI
       - name: Run tests
-        run: ./test/run.sh
+        run: ./test/run.py
