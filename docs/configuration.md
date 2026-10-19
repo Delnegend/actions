@@ -297,7 +297,7 @@ Called as a job, so each of their runs is a separate set of status checks.
 | Workflow | Purpose |
 |---|---|
 | `reusable-auto-merge.yml` | Auto-merges dependency PRs (dependabot-style `dependencies` label, optional `extra-head-prefix`), and optionally `release/` branches. |
-| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine (`cargo`/`bun`/`bun-dir` inputs; frozen repos pass both false). |
+| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine. Every toolchain is opt-in: a caller names the ones it wants (`cargo`, `bun`, `bun-dir`), and what it does not name is not touched. |
 | `scan.yml` | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). Every scan runs by default; `exclude` opts out. |
 
 The first two replace the former copy-pasted `auto-merge.yml` / `deps.yml`
