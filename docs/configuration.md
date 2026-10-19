@@ -115,6 +115,61 @@ The caller must provide:
   checkout's credentials.
 - `contents: write` on the job.
 - `just` on `PATH` with `version get` / `version bump` recipes.
+
+## cargo-cooldown
+
+Gate for scheduled upgrades: reports whether the installed Cargo enforces
+`registry.global-min-publish-age` (stable from 1.100). One output, `enforced`.
+
+```yaml
+- uses: Delnegend/actions/cargo-cooldown@<sha> # v1
+  id: cooldown
+- if: steps.cooldown.outputs.enforced == 'true'
+  run: cargo update
+```
+
+## publish-release
+
+Finishes a release workflow: optionally downloads the consolidated build
+artifacts, then creates the GitHub release (or skips it on test-builds).
+
+| Input | Default | Description |
+|---|---|---|
+| `ref` | — | Tag (or SHA) the build jobs checked out. Required. |
+| `publish` | `"false"` | `"true"` creates the release. |
+| `download` | `"true"` | `"false"` skips the download step (container releases, freshdesk). |
+| `files` | `"artifacts/**/*"` | Release asset glob. |
+| `body` / `body-path` | `""` | Inline notes or a notes file. |
+
+```yaml
+- uses: Delnegend/actions/publish-release@<sha> # v1
+  with:
+    ref: ${{ needs.prepare.outputs.ref }}
+    publish: ${{ needs.prepare.outputs.publish }}
+```
+
+## docker-build-push
+
+Builds a container image with Buildx and pushes it (or loads it locally for
+test-builds). Two tags always (`<image>:<version>`, `<image>:latest`),
+zstd layers on publish, OCI labels, gha or registry cache. Repo-specific
+staging (example configs) and post-build asserts stay in the caller.
+
+| Input | Default | Description |
+|---|---|---|
+| `image` / `version` | — | Both required. |
+| `publish` | `"false"` | Pushes on `"true"`, loads locally otherwise. |
+| `target` / `platforms` / `dockerfile` / `context` | `""` / `linux/amd64` / `Dockerfile` / `.` | Build shape. |
+| `build-args` | `""` | Newline-separated `KEY=VALUE`. |
+| `cache` | `gha` | Or `registry` (`<image>:buildcache`). |
+
+## Reusable workflows
+
+`reusable-auto-merge.yml` (dependabot-style `dependencies` label, optional
+`extra-head-prefix`) and `reusable-deps-update.yml` (daily upgrade PRs;
+`cargo`/`bun`/`bun-dir` inputs, frozen repos pass both false) replace the
+former copy-pasted `auto-merge.yml` / `deps.yml` bodies. Callers keep their
+triggers and permissions; the workflow owns concurrency and the PR flow.
 ## package-artifact
 
 ### How it fits together
