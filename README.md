@@ -19,7 +19,7 @@ job reads:
 ```yaml
 - name: Bump, tag, and push
   id: resolve
-  uses: Delnegend/actions/resolve-release@1299339be1f82a70f2580c26c82f5a6925b99dc4 # v1
+  uses: Delnegend/actions/resolve-release@95ab222e3127d13ebbe6cf220f57254ce17beffe # v1
   with:
     ref: ${{ inputs.ref }}
     dry-run: ${{ inputs.dry-run }}
@@ -39,6 +39,12 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 |---|---|
 | [`resolve-release`](resolve-release/action.yml) | Decides what a release run does, then does it. |
 | [`package-artifact`](package-artifact/action.yml) | Stages, archives and uploads one build artifact under a consistent name. |
+| [`cargo-cooldown`](cargo-cooldown/action.yml) | Checks the installed Cargo enforces the 14-day publish quarantine. |
+| [`publish-release`](publish-release/action.yml) | Downloads build artifacts and publishes the GitHub release. |
+| [`docker-build-push`](docker-build-push/action.yml) | Builds a container image with Buildx and pushes it (or loads it locally). |
+| [`reusable-auto-merge`](.github/workflows/reusable-auto-merge.yml) | Auto-merges dependency (and optionally `release/`) PRs. |
+| [`reusable-deps-update`](.github/workflows/reusable-deps-update.yml) | Weekly dependency-upgrade PRs behind the publish quarantine. |
+| [`scan.yml`](.github/workflows/scan.yml) | Reusable security-scan bundle (gitleaks, actionlint, semgrep, trivy, osv). |
 
 ## Highlights
 
@@ -50,6 +56,8 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 - **Format and layout are not call-site inputs** — zip for a Windows target, tar.xz otherwise, both at maximum effort, one directory, decided once in one place.
 - **The executable bit survives the round trip** — `download-artifact` strips it, so it is recorded inside the archive rather than restored afterwards.
 - **Reproducible** — timestamps are normalised, so rebuilding a tag produces byte-identical archives.
+- **One scan bundle, opted out not in** — every repo runs gitleaks, actionlint, semgrep, trivy and osv; opting out names the exception instead of restating the rule.
+- **One build-and-push shape** — two tags, zstd layers, gha or registry cache, decided once in `docker-build-push` instead of in four release workflows.
 
 ## Dispatch Modes
 
@@ -65,7 +73,7 @@ quietly doing nothing.
 
 ## Configuration
 
-Every input, output, and the manifest-less project variant:
+Every input, output, and the `just version` recipe contract:
 **[`docs/configuration.md`](docs/configuration.md)**.
 
 ## Documentation

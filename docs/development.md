@@ -35,6 +35,11 @@ runs:
         echo "result=$THING" >> "$GITHUB_OUTPUT"
 ```
 
+Whole jobs that every repo repeats (auto-merge, weekly upgrades) go in
+`.github/workflows/reusable-*.yml` instead: one `workflow_call` workflow with
+typed inputs, called as a job via `uses:`. Same pinning discipline — full SHA
+with a `# vN` comment.
+
 ## Testing
 
 `./test/run.sh` extracts the `run:` block from an action and drives it against
