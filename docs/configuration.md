@@ -1,10 +1,22 @@
 # Configuration Reference
 
-Reference for [`resolve-release`](../resolve-release/action.yml) and
-[`package-artifact`](../package-artifact/action.yml).
+Reference for every action and reusable workflow in this repository, in the
+order the release pipeline uses them.
+
+**Composite actions** run inside the caller's job and workspace.
 
 - [`resolve-release`](#resolve-release) — decides and performs the release.
 - [`package-artifact`](#package-artifact) — builds the archive for one target.
+- [`publish-release`](#publish-release) — publishes the release.
+- [`cargo-cooldown`](#cargo-cooldown) — checks the publish quarantine is enforceable.
+- [`docker-build-push`](#docker-build-push) — builds and pushes a container image.
+
+**Reusable workflows** are called as a job, and each of their runs is a
+separate set of status checks.
+
+- [`reusable-auto-merge`](#reusable-workflows) — auto-merges bot PRs.
+- [`reusable-deps-update`](#reusable-workflows) — opens dependency-upgrade PRs.
+- [`scan`](#reusable-workflows) — runs the security scans.
 
 ## resolve-release
 
@@ -116,60 +128,6 @@ The caller must provide:
 - `contents: write` on the job.
 - `just` on `PATH` with `version get` / `version bump` recipes.
 
-## cargo-cooldown
-
-Gate for scheduled upgrades: reports whether the installed Cargo enforces
-`registry.global-min-publish-age` (stable from 1.100). One output, `enforced`.
-
-```yaml
-- uses: Delnegend/actions/cargo-cooldown@<sha> # v1
-  id: cooldown
-- if: steps.cooldown.outputs.enforced == 'true'
-  run: cargo update
-```
-
-## publish-release
-
-Finishes a release workflow: optionally downloads the consolidated build
-artifacts, then creates the GitHub release (or skips it on test-builds).
-
-| Input | Default | Description |
-|---|---|---|
-| `ref` | — | Tag (or SHA) the build jobs checked out. Required. |
-| `publish` | `"false"` | `"true"` creates the release. |
-| `download` | `"true"` | `"false"` skips the download step (container releases, freshdesk). |
-| `files` | `"artifacts/**/*"` | Release asset glob. |
-| `body` / `body-path` | `""` | Inline notes or a notes file. |
-
-```yaml
-- uses: Delnegend/actions/publish-release@<sha> # v1
-  with:
-    ref: ${{ needs.prepare.outputs.ref }}
-    publish: ${{ needs.prepare.outputs.publish }}
-```
-
-## docker-build-push
-
-Builds a container image with Buildx and pushes it (or loads it locally for
-test-builds). Two tags always (`<image>:<version>`, `<image>:latest`),
-zstd layers on publish, OCI labels, gha or registry cache. Repo-specific
-staging (example configs) and post-build asserts stay in the caller.
-
-| Input | Default | Description |
-|---|---|---|
-| `image` / `version` | — | Both required. |
-| `publish` | `"false"` | Pushes on `"true"`, loads locally otherwise. |
-| `target` / `platforms` / `dockerfile` / `context` | `""` / `linux/amd64` / `Dockerfile` / `.` | Build shape. |
-| `build-args` | `""` | Newline-separated `KEY=VALUE`. |
-| `cache` | `gha` | Or `registry` (`<image>:buildcache`). |
-
-## Reusable workflows
-
-`reusable-auto-merge.yml` (dependabot-style `dependencies` label, optional
-`extra-head-prefix`) and `reusable-deps-update.yml` (daily upgrade PRs;
-`cargo`/`bun`/`bun-dir` inputs, frozen repos pass both false) replace the
-former copy-pasted `auto-merge.yml` / `deps.yml` bodies. Callers keep their
-triggers and permissions; the workflow owns concurrency and the PR flow.
 ## package-artifact
 
 ### How it fits together
@@ -284,3 +242,64 @@ step overwrites rather than appends.
   the ref. The pin lands here, once, rather than in every consumer.
 - The packaging and archiving steps are gone from the caller's build job; the
   action owns them, and nothing needs installing to produce either format.
+
+## publish-release
+
+Finishes a release workflow: optionally downloads the consolidated build
+artifacts, then creates the GitHub release (or skips it on test-builds).
+
+| Input | Default | Description |
+|---|---|---|
+| `ref` | — | Tag (or SHA) the build jobs checked out. Required. |
+| `publish` | `"false"` | `"true"` creates the release. |
+| `download` | `"true"` | `"false"` skips the download step (container releases, freshdesk). |
+| `files` | `"artifacts/**/*"` | Release asset glob. |
+| `body` / `body-path` | `""` | Inline notes or a notes file. |
+
+```yaml
+- uses: Delnegend/actions/publish-release@<sha> # v1
+  with:
+    ref: ${{ needs.prepare.outputs.ref }}
+    publish: ${{ needs.prepare.outputs.publish }}
+```
+
+## cargo-cooldown
+
+Gate for scheduled upgrades: reports whether the installed Cargo enforces
+`registry.global-min-publish-age` (stable from 1.100). One output, `enforced`.
+
+```yaml
+- uses: Delnegend/actions/cargo-cooldown@<sha> # v1
+  id: cooldown
+- if: steps.cooldown.outputs.enforced == 'true'
+  run: cargo update
+```
+
+## docker-build-push
+
+Builds a container image with Buildx and pushes it (or loads it locally for
+test-builds). Two tags always (`<image>:<version>`, `<image>:latest`),
+zstd layers on publish, OCI labels, gha or registry cache. Repo-specific
+staging (example configs) and post-build asserts stay in the caller.
+
+| Input | Default | Description |
+|---|---|---|
+| `image` / `version` | — | Both required. |
+| `publish` | `"false"` | Pushes on `"true"`, loads locally otherwise. |
+| `target` / `platforms` / `dockerfile` / `context` | `""` / `linux/amd64` / `Dockerfile` / `.` | Build shape. |
+| `build-args` | `""` | Newline-separated `KEY=VALUE`. |
+| `cache` | `gha` | Or `registry` (`<image>:buildcache`). |
+
+## Reusable workflows
+
+Called as a job, so each of their runs is a separate set of status checks.
+
+| Workflow | Purpose |
+|---|---|
+| `reusable-auto-merge.yml` | Auto-merges dependency PRs (dependabot-style `dependencies` label, optional `extra-head-prefix`), and optionally `release/` branches. |
+| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine (`cargo`/`bun`/`bun-dir` inputs; frozen repos pass both false). |
+| `scan.yml` | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). Every scan runs by default; `exclude` opts out. |
+
+The first two replace the former copy-pasted `auto-merge.yml` / `deps.yml`
+bodies. Callers keep their triggers and permissions; the workflow owns
+concurrency and the PR flow.

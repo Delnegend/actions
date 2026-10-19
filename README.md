@@ -35,16 +35,24 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 
 ## What's Inside
 
+**Composite actions** run inside the caller's job and workspace.
+
 | Action | Purpose |
 |---|---|
 | [`resolve-release`](resolve-release/action.yml) | Decides what a release run does, then does it. |
 | [`package-artifact`](package-artifact/action.yml) | Stages, archives and uploads one build artifact under a consistent name. |
-| [`cargo-cooldown`](cargo-cooldown/action.yml) | Checks the installed Cargo enforces the 14-day publish quarantine. |
-| [`publish-release`](publish-release/action.yml) | Downloads build artifacts and publishes the GitHub release. |
-| [`docker-build-push`](docker-build-push/action.yml) | Builds a container image with Buildx and pushes it (or loads it locally). |
-| [`reusable-auto-merge`](.github/workflows/reusable-auto-merge.yml) | Auto-merges dependency (and optionally `release/`) PRs. |
-| [`reusable-deps-update`](.github/workflows/reusable-deps-update.yml) | Weekly dependency-upgrade PRs behind the publish quarantine. |
-| [`scan.yml`](.github/workflows/scan.yml) | Reusable security-scan bundle (gitleaks, actionlint, semgrep, trivy, osv). |
+| [`publish-release`](publish-release/action.yml) | Downloads the build artifacts and publishes the GitHub release. |
+| [`cargo-cooldown`](cargo-cooldown/action.yml) | Checks that the installed Cargo enforces the 14-day publish quarantine. |
+| [`docker-build-push`](docker-build-push/action.yml) | Builds a container image with Buildx and pushes it, or loads it locally. |
+
+**Reusable workflows** are called as a job, and each of their runs is a
+separate set of status checks.
+
+| Workflow | Purpose |
+|---|---|
+| [`reusable-auto-merge`](.github/workflows/reusable-auto-merge.yml) | Auto-merges dependency PRs, and optionally `release/` branches. |
+| [`reusable-deps-update`](.github/workflows/reusable-deps-update.yml) | Opens weekly dependency-upgrade PRs behind the publish quarantine. |
+| [`scan`](.github/workflows/scan.yml) | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). |
 
 ## Highlights
 
