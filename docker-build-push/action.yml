@@ -1,0 +1,109 @@
+name: docker-build-push
+description: >-
+  Build a container image with Buildx and push it (or load it locally for
+  test-builds). Exactly two tags, never rolling ones; zstd-compressed layers
+  on publish; gha or registry cache. Repo-specific staging (example configs)
+  and post-build asserts stay in the caller.
+
+inputs:
+  image:
+    description: Fully qualified image name, e.g. ghcr.io/delnegend/hath.
+    required: true
+  version:
+    description: Version tag, without the v prefix.
+    required: true
+  publish:
+    description: "'true' pushes to the registry; otherwise the image loads locally."
+    required: false
+    default: "false"
+  context:
+    description: Build context.
+    required: false
+    default: "."
+  dockerfile:
+    description: Path to the Dockerfile.
+    required: false
+    default: Dockerfile
+  target:
+    description: Build stage. Empty builds the default (last) stage.
+    required: false
+    default: ""
+  platforms:
+    description: Target platforms.
+    required: false
+    default: linux/amd64
+  build-args:
+    description: Newline-separated KEY=VALUE build arguments.
+    required: false
+    default: ""
+  cache:
+    description: Layer cache backend — gha or registry.
+    required: false
+    default: gha
+
+outputs:
+  digest:
+    description: Image digest of the build.
+    value: ${{ steps.build-gha.outputs.digest }}${{ steps.build-registry.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+    - name: Log in to GitHub Container Registry
+      if: inputs.publish == 'true'
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Exactly two tags, never rolling ones, so a version always means the same
+    # image. Test builds load locally instead of pushing.
+    - name: Build and push image (gha cache)
+      id: build-gha
+      if: inputs.cache == 'gha'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        target: ${{ inputs.target }}
+        platforms: ${{ inputs.platforms }}
+        push: ${{ inputs.publish == 'true' }}
+        load: ${{ inputs.publish != 'true' }}
+        outputs: ${{ inputs.publish == 'true' && 'type=image,compression=zstd,compression-level=4' || '' }}
+        build-args: ${{ inputs.build-args }}
+        tags: |
+          ${{ inputs.image }}:${{ inputs.version }}
+          ${{ inputs.image }}:latest
+        labels: |
+          org.opencontainers.image.version=${{ inputs.version }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push image (registry cache)
+      id: build-registry
+      if: inputs.cache == 'registry'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        target: ${{ inputs.target }}
+        platforms: ${{ inputs.platforms }}
+        push: ${{ inputs.publish == 'true' }}
+        load: ${{ inputs.publish != 'true' }}
+        outputs: ${{ inputs.publish == 'true' && 'type=image,compression=zstd,compression-level=4' || '' }}
+        build-args: ${{ inputs.build-args }}
+        tags: |
+          ${{ inputs.image }}:${{ inputs.version }}
+          ${{ inputs.image }}:latest
+        labels: |
+          org.opencontainers.image.version=${{ inputs.version }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+        cache-from: type=registry,ref=${{ inputs.image }}:buildcache
+        cache-to: type=registry,ref=${{ inputs.image }}:buildcache,mode=max,image-manifest=true

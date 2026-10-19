@@ -1,0 +1,53 @@
+name: publish-release
+description: >-
+  Finish a release workflow: optionally collect the consolidated build
+  artifacts, then publish (or stage) the GitHub release. The matrix layout
+  and per-target packaging stay in the caller; this only finishes the job.
+
+inputs:
+  ref:
+    description: Tag (or SHA for a test-build) the build jobs checked out.
+    required: true
+  publish:
+    description: "'true' creates the GitHub release."
+    required: false
+    default: "false"
+  download:
+    description: "'true' downloads run artifacts first (binary releases)."
+    required: false
+    default: "true"
+  files:
+    description: Release asset glob, relative to the workspace.
+    required: false
+    default: "artifacts/**/*"
+  body:
+    description: Inline release notes (container images point at the registry).
+    required: false
+    default: ""
+  body-path:
+    description: Optional file with release notes to use instead.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Download all artifacts
+      if: inputs.download == 'true'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+      with:
+        path: artifacts
+        # Each matrix entry uploads one archive; merge them into a single
+        # directory rather than one subdirectory per entry.
+        merge-multiple: true
+
+    - name: Publish Consolidated Release
+      if: inputs.publish == 'true'
+      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+      with:
+        tag_name: ${{ inputs.ref }}
+        name: ${{ inputs.ref }}
+        generate_release_notes: true
+        body: ${{ inputs.body }}
+        body_path: ${{ inputs.body-path }}
+        files: ${{ inputs.files }}

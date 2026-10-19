@@ -1,0 +1,33 @@
+name: Auto-merge bot branches
+
+# Reusable auto-merge for bot PRs. Consumers keep their own trigger so the
+# workflow name stays theirs:
+#
+#   automerge:
+#     uses: Delnegend/actions/.github/workflows/reusable-auto-merge.yml@<sha>
+#     with:
+#       extra-head-prefix: 'release/'  # optional, e.g. headless-brave
+#
+# The `dependencies` label is always honoured; `extra-head-prefix` adds one
+# branch-prefix rule (empty disables it).
+
+on:
+  workflow_call:
+    inputs:
+      extra-head-prefix:
+        description: Additional branch prefix to auto-merge besides the dependencies label.
+        type: string
+        default: ""
+
+jobs:
+  automerge:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'dependencies') ||
+      (inputs.extra-head-prefix != '' && startsWith(github.head_ref, inputs.extra-head-prefix))
+    runs-on: ubuntu-slim
+    steps:
+      - name: Enable auto-merge and rebase
+        run: gh pr merge --auto --rebase "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}
