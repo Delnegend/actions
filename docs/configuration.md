@@ -41,8 +41,6 @@ The semver outputs are inputs to this action, so the workflow must run
 | `ref` | `""` | Dispatch ref: empty, a commit SHA (7–64 hex), or `vX.Y.Z`. |
 | `dry-run` | `false` | Preview the run without mutating anything. |
 | `gate-sha` | `""` | Commit the CI gate approved. Shipping refuses if `HEAD` no longer matches. Ignored for `ref` dispatch, which pins its own commit. |
-| `manifest-path` | `Cargo.toml` | File holding the source-of-truth version, used to recover a lost tag. Empty disables recovery. |
-| `bump-command` | `just bump` | Command that rewrites the version files; the new version is passed as its first argument. Empty means manifest-less. |
 | `semver-bump` | `""` | Bump type from `semver-action` (`major`, `minor`, `patch`, `none`). |
 | `semver-current` | `""` | Current version from `semver-action`. |
 | `semver-next` | `""` | Next version including the `v` prefix. |
@@ -159,7 +157,6 @@ tap.
 | `name` | — | Artifact base name, e.g. `rsrpc`. Required. |
 | `version` | — | Version being released. A leading `v` is dropped. Required. |
 | `target` | — | Platform slug, e.g. `x86_64-unknown-linux-gnu`. Required. |
-| `output-dir` | `dist` | Where to write the archive. |
 | `upload` | `true` | Upload the archive to the Actions run. |
 
 ### What the action decides
@@ -252,9 +249,13 @@ artifacts, then creates the GitHub release (or skips it on test-builds).
 |---|---|---|
 | `ref` | — | Tag (or SHA) the build jobs checked out. Required. |
 | `publish` | `"false"` | `"true"` creates the release. |
-| `download` | `"true"` | `"false"` skips the download step (container releases, freshdesk). |
+| `download` | `"true"` | `"false"` skips the download step (container releases). |
 | `files` | `"artifacts/**/*"` | Release asset glob. |
-| `body` / `body-path` | `""` | Inline notes or a notes file. |
+| `image` / `version` | `""` | Both set for a container release: the body is a pull snippet for `image:version`. Both empty for a binary release: the body is the generated notes alone. |
+
+The body is generated here, not written by hand in callers. Install
+instructions belong in the repo's docs (e.g. `docs/deployment.md`), which are
+versioned and reviewable, not in a heredoc inside the workflow.
 
 ```yaml
 - uses: Delnegend/actions/publish-release@<sha> # v1
@@ -279,16 +280,16 @@ Gate for scheduled upgrades: reports whether the installed Cargo enforces
 
 Builds a container image with Buildx and pushes it (or loads it locally for
 test-builds). Two tags always (`<image>:<version>`, `<image>:latest`),
-zstd layers on publish, OCI labels, gha or registry cache. Repo-specific
+zstd layers on publish, OCI labels, registry layer cache. Single platform
+(`linux/amd64`), `./Dockerfile`, build context `.`. Repo-specific
 staging (example configs) and post-build asserts stay in the caller.
 
 | Input | Default | Description |
 |---|---|---|
 | `image` / `version` | — | Both required. |
 | `publish` | `"false"` | Pushes on `"true"`, loads locally otherwise. |
-| `target` / `platforms` / `dockerfile` / `context` | `""` / `linux/amd64` / `Dockerfile` / `.` | Build shape. |
+| `target` | `""` | Build stage. The only stage in use is `server` (l4d2). |
 | `build-args` | `""` | Newline-separated `KEY=VALUE`. |
-| `cache` | `gha` | Or `registry` (`<image>:buildcache`). |
 
 ## Reusable workflows
 
@@ -297,8 +298,8 @@ Called as a job, so each of their runs is a separate set of status checks.
 | Workflow | Purpose |
 |---|---|
 | `reusable-auto-merge.yml` | Auto-merges dependency PRs (dependabot-style `dependencies` label, optional `extra-head-prefix`), and optionally `release/` branches. |
-| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine. Every toolchain is opt-in: a caller names the ones it wants (`cargo`, `bun`, `bun-dir`), and what it does not name is not touched. |
-| `scan.yml` | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). Every scan runs by default; `exclude` opts out. |
+| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine. Every toolchain is opt-in: a caller names the ones it wants (`cargo`, `bun`, `bun-dir` — bun at `latest`), and what it does not name is not touched. |
+| `scan.yml` | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). Every scan runs by default; `exclude` opts out. Trivy always runs the full `vuln,misconfig,secret` set; a repo-root `osv-scanner.toml`, when present, is used as the quarantine config automatically. |
 
 The first two replace the former copy-pasted `auto-merge.yml` / `deps.yml`
 bodies. Callers keep their triggers and permissions; the workflow owns

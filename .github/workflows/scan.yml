@@ -10,8 +10,7 @@ name: Scan
 #     permissions:
 #       contents: read
 #
-# All scans run by default. Opt out with `exclude` (space-separated). The old
-# `scans` whitelist still works and intersects with `exclude`.
+# All scans run by default. Opt out with `exclude` (space-separated).
 #
 #   scan:
 #     uses: Delnegend/actions/.github/workflows/scan.yml@<sha>
@@ -21,47 +20,16 @@ name: Scan
 on:
   workflow_call:
     inputs:
-      scans:
-        description: >-
-          Legacy whitelist of scans to run, from gitleaks, actionlint,
-          semgrep, trivy and osv. Prefer `exclude`: omitting `scans` runs
-          everything not excluded.
-        type: string
-        default: gitleaks actionlint semgrep trivy osv
       exclude:
         description: >-
           Space-separated scans to skip, e.g. "osv" for a project with no
-          lockfile. Intersects with `scans`.
-        type: string
-        default: ""
-      trivy-scanners:
-        description: >-
-          Scanners Trivy runs. Empty means Trivy's own default, which is
-          vuln,secret and excludes misconfiguration.
-        type: string
-        default: vuln,misconfig
-      osv-config:
-        description: >-
-          OSV-Scanner config file at the repository root, for a project that
-          quarantines an advisory the daily upgrade cannot yet fix.
+          lockfile.
         type: string
         default: ""
   workflow_dispatch:
     inputs:
-      scans:
-        description: Scans to run.
-        type: string
-        default: gitleaks actionlint semgrep trivy osv
       exclude:
         description: Space-separated scans to skip.
-        type: string
-        default: ""
-      trivy-scanners:
-        description: Scanners Trivy runs.
-        type: string
-        default: vuln,misconfig
-      osv-config:
-        description: OSV-Scanner config file at the repository root.
         type: string
         default: ""
 
@@ -71,7 +39,7 @@ permissions:
 jobs:
   gitleaks:
     name: Secret Scanning (Gitleaks)
-    if: contains(inputs.scans, 'gitleaks') && !contains(inputs.exclude, 'gitleaks')
+    if: "!contains(inputs.exclude, 'gitleaks')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -84,7 +52,7 @@ jobs:
 
   actionlint:
     name: Workflow lint (actionlint)
-    if: contains(inputs.scans, 'actionlint') && !contains(inputs.exclude, 'actionlint')
+    if: "!contains(inputs.exclude, 'actionlint')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -96,7 +64,7 @@ jobs:
 
   semgrep:
     name: SAST (Semgrep)
-    if: contains(inputs.scans, 'semgrep') && !contains(inputs.exclude, 'semgrep')
+    if: "!contains(inputs.exclude, 'semgrep')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -104,24 +72,25 @@ jobs:
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" returntocorp/semgrep semgrep scan --config=auto --error
 
   trivy:
-    name: Misconfig & Vulns (Trivy)
-    if: contains(inputs.scans, 'trivy') && !contains(inputs.exclude, 'trivy')
+    name: Misconfig, Vulns & Secrets (Trivy)
+    if: "!contains(inputs.exclude, 'trivy')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # `-w /src` matters: Trivy reads .trivyignore from its working
       # directory, not from the scan target, so a project with one only gets it
       # applied when Trivy runs from inside the tree. Harmless otherwise.
+      # Fixed scanner set: vuln + misconfig + secret. No caller needed a
+      # narrower set; per-repo knobs only hid signal.
       - name: Run Trivy
         run: >-
           docker run --rm -w /src -v "${GITHUB_WORKSPACE}:/src" aquasec/trivy fs /src
-          --severity HIGH,CRITICAL
-          ${{ inputs.trivy-scanners && format('--scanners {0}', inputs.trivy-scanners) || '' }}
+          --severity HIGH,CRITICAL --scanners vuln,misconfig,secret
           --exit-code 1
 
   osv:
     name: Dependencies (OSV-Scanner)
-    if: contains(inputs.scans, 'osv') && !contains(inputs.exclude, 'osv')
+    if: "!contains(inputs.exclude, 'osv')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -136,9 +105,21 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
             echo "::notice::no lockfile tracked, skipping OSV-Scanner"
           fi
+      # A quarantine file at the repo root is picked up automatically. It
+      # exists for advisories the daily upgrade cannot fix yet; each entry
+      # carries its own review date. No input needed.
+      - name: Look for an OSV quarantine config
+        id: osv-config
+        run: |
+          if [ -f osv-scanner.toml ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "using osv-scanner.toml quarantine config"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Run OSV-Scanner
         if: steps.lockfile.outputs.found == 'true'
         run: >-
           docker run --rm -v "${GITHUB_WORKSPACE}:/src" ghcr.io/google/osv-scanner:latest
-          ${{ inputs.osv-config && format('--config=/src/{0}', inputs.osv-config) || '' }}
+          ${{ steps.osv-config.outputs.found == 'true' && '--config=/src/osv-scanner.toml' || '' }}
           --recursive /src

@@ -2,8 +2,8 @@ name: docker-build-push
 description: >-
   Build a container image with Buildx and push it (or load it locally for
   test-builds). Exactly two tags, never rolling ones; zstd-compressed layers
-  on publish; gha or registry cache. Repo-specific staging (example configs)
-  and post-build asserts stay in the caller.
+  on publish; registry layer cache shared across runs. Repo-specific staging
+  (example configs) and post-build asserts stay in the caller.
 
 inputs:
   image:
@@ -16,35 +16,21 @@ inputs:
     description: "'true' pushes to the registry; otherwise the image loads locally."
     required: false
     default: "false"
-  context:
-    description: Build context.
-    required: false
-    default: "."
-  dockerfile:
-    description: Path to the Dockerfile.
-    required: false
-    default: Dockerfile
   target:
-    description: Build stage. Empty builds the default (last) stage.
+    description: >-
+      Build stage. Empty builds the default (last) stage. The only stage
+      in use is `server` (l4d2); keep other repos stageless.
     required: false
     default: ""
-  platforms:
-    description: Target platforms.
-    required: false
-    default: linux/amd64
   build-args:
     description: Newline-separated KEY=VALUE build arguments.
     required: false
     default: ""
-  cache:
-    description: Layer cache backend — gha or registry.
-    required: false
-    default: gha
 
 outputs:
   digest:
     description: Image digest of the build.
-    value: ${{ steps.build-gha.outputs.digest }}${{ steps.build-registry.outputs.digest }}
+    value: ${{ steps.build.outputs.digest }}
 
 runs:
   using: composite
@@ -61,39 +47,17 @@ runs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     # Exactly two tags, never rolling ones, so a version always means the same
-    # image. Test builds load locally instead of pushing.
-    - name: Build and push image (gha cache)
-      id: build-gha
-      if: inputs.cache == 'gha'
+    # image. Test builds load locally instead of pushing. Single platform:
+    # every image in the fleet is linux/amd64, and the registry cache is
+    # shared across runs rather than scoped to one workflow's cache.
+    - name: Build and push image
+      id: build
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
       with:
-        context: ${{ inputs.context }}
-        file: ${{ inputs.dockerfile }}
+        context: .
+        file: Dockerfile
         target: ${{ inputs.target }}
-        platforms: ${{ inputs.platforms }}
-        push: ${{ inputs.publish == 'true' }}
-        load: ${{ inputs.publish != 'true' }}
-        outputs: ${{ inputs.publish == 'true' && 'type=image,compression=zstd,compression-level=4' || '' }}
-        build-args: ${{ inputs.build-args }}
-        tags: |
-          ${{ inputs.image }}:${{ inputs.version }}
-          ${{ inputs.image }}:latest
-        labels: |
-          org.opencontainers.image.version=${{ inputs.version }}
-          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.revision=${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-
-    - name: Build and push image (registry cache)
-      id: build-registry
-      if: inputs.cache == 'registry'
-      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-      with:
-        context: ${{ inputs.context }}
-        file: ${{ inputs.dockerfile }}
-        target: ${{ inputs.target }}
-        platforms: ${{ inputs.platforms }}
+        platforms: linux/amd64
         push: ${{ inputs.publish == 'true' }}
         load: ${{ inputs.publish != 'true' }}
         outputs: ${{ inputs.publish == 'true' && 'type=image,compression=zstd,compression-level=4' || '' }}

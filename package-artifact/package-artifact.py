@@ -34,10 +34,10 @@ Environment, set by the action wrapper:
               the .exe suffix is tried when the plain path is absent
   EXTRA       optional space-separated additional paths to include
   NAME        artifact base name, e.g. rsrpc
-  VERSION     version being released, with or without a leading v
   TARGET      target triple, e.g. x86_64-unknown-linux-gnu. Its OS component
               selects the archive format, not the runner's.
-  OUTDIR      directory to write the archive into
+
+The archive is always written into `dist/`.
 
 Results are appended to $GITHUB_OUTPUT.
 """
@@ -275,7 +275,7 @@ def main():
     sources = collect(target)
 
     stem = f"{name}-{version}-{target}"
-    outdir = Path(env("OUTDIR") or "dist")
+    outdir = Path("dist")
     outdir.mkdir(parents=True, exist_ok=True)
     archive = outdir / f"{stem}{SUFFIX[fmt]}"
 

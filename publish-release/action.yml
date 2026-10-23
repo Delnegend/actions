@@ -3,6 +3,9 @@ description: >-
   Finish a release workflow: optionally collect the consolidated build
   artifacts, then publish (or stage) the GitHub release. The matrix layout
   and per-target packaging stay in the caller; this only finishes the job.
+  The release body is generated here, never written by hand in a caller:
+  a container image gets a pull snippet, a binary release gets the
+  auto-generated notes.
 
 inputs:
   ref:
@@ -20,15 +23,19 @@ inputs:
     description: Release asset glob, relative to the workspace.
     required: false
     default: "artifacts/**/*"
-  body:
-    description: Inline release notes (container images point at the registry).
+  image:
+    description: >-
+      Fully qualified image name for a container release, e.g.
+      ghcr.io/delnegend/hath. Empty means a binary release, whose body is
+      the auto-generated notes alone.
     required: false
     default: ""
-  body-path:
-    description: Optional file with release notes to use instead.
+  version:
+    description: >-
+      Version tag without the v prefix, for the container pull snippet.
+      Required when `image` is set, ignored otherwise.
     required: false
     default: ""
-
 runs:
   using: composite
   steps:
@@ -41,6 +48,37 @@ runs:
         # directory rather than one subdirectory per entry.
         merge-multiple: true
 
+    # One body for every release, generated from what the action already
+    # knows. A container release names the image pull; a binary release is
+    # the generated notes alone. Nothing per-release is ever hand-written
+    # in a caller, so nothing can drift between repos.
+    - name: Render release body
+      id: body
+      if: inputs.publish == 'true'
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        VERSION: ${{ inputs.version }}
+        REF: ${{ inputs.ref }}
+      run: |
+        set -euo pipefail
+        if [ -n "$IMAGE" ]; then
+          [ -n "$VERSION" ] || { echo "::error::publish-release: version is required with image" >&2; exit 1; }
+          {
+            echo "Container image:"
+            echo
+            echo '```'
+            echo "docker pull $IMAGE:$VERSION"
+            echo '```'
+            echo
+            echo "Or \`latest\` for the most recent release. The git tag \`$REF\`"
+            echo "is the same image, named the way git wants it."
+          } > "$RUNNER_TEMP/release-body.md"
+          echo "path=$RUNNER_TEMP/release-body.md" >> "$GITHUB_OUTPUT"
+        else
+          echo "path=" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Publish Consolidated Release
       if: inputs.publish == 'true'
       uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
@@ -48,6 +86,5 @@ runs:
         tag_name: ${{ inputs.ref }}
         name: ${{ inputs.ref }}
         generate_release_notes: true
-        body: ${{ inputs.body }}
-        body_path: ${{ inputs.body-path }}
+        body_path: ${{ steps.body.outputs.path }}
         files: ${{ inputs.files }}

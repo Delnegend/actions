@@ -30,10 +30,6 @@ inputs:
   target:
     description: Platform slug, e.g. x86_64-unknown-linux-gnu.
     required: true
-  output-dir:
-    description: Directory to write the archive into.
-    required: false
-    default: "dist"
   upload:
     description: Whether to upload the archive to the Actions run.
     required: false
@@ -61,7 +57,6 @@ runs:
         NAME: ${{ inputs.name }}
         VERSION: ${{ inputs.version }}
         TARGET: ${{ inputs.target }}
-        OUTDIR: ${{ inputs.output-dir }}
       run: python3 "$GITHUB_ACTION_PATH/package-artifact.py"
 
     # The archive is uploaded under its final release name, so the Actions run

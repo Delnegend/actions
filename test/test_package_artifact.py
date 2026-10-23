@@ -55,7 +55,6 @@ def test_windows_cannot_follow_symlinks(results: Results, script: pathlib.Path) 
         environment.update(
             {
                 "SOURCE": "pkg",
-                "OUTDIR": "out",
                 "NAME": "t",
                 "VERSION": "1.0.0",
                 "TARGET": "x86_64-pc-windows-msvc",
@@ -68,7 +67,7 @@ def test_windows_cannot_follow_symlinks(results: Results, script: pathlib.Path) 
             capture_output=True,
             text=True,
         )
-        archive = work / "out" / "t-1.0.0-x86_64-pc-windows-msvc.zip"
+        archive = work / "dist" / "t-1.0.0-x86_64-pc-windows-msvc.zip"
         if proc.returncode == 0 and archive.is_file():
             results.ok("packaging survives a platform that cannot follow symlinks")
         else:
@@ -89,7 +88,7 @@ def test_rebuild_is_byte_identical(results: Results, script: pathlib.Path, targe
     the archive has to come out the same bytes twice.
     """
     package = Package(script, source="app.sh", target=target)
-    first = sha256(package.work / "out" / package.archive)
+    first = sha256(package.work / "dist" / package.archive)
     # A second run in the same output directory: the archive must be replaced,
     # not appended to.
     time.sleep(1)
@@ -98,7 +97,6 @@ def test_rebuild_is_byte_identical(results: Results, script: pathlib.Path, targe
     environment.update(
         {
             "SOURCE": "app.sh",
-            "OUTDIR": "out",
             "NAME": "rsrpc",
             "VERSION": "0.29.0",
             "TARGET": target,
@@ -111,7 +109,7 @@ def test_rebuild_is_byte_identical(results: Results, script: pathlib.Path, targe
         capture_output=True,
         text=True,
     )
-    second = sha256(package.work / "out" / package.archive)
+    second = sha256(package.work / "dist" / package.archive)
     package.close()
     results.assert_eq(f"rebuild is byte-identical, not appended ({target})", second, first)
 

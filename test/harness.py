@@ -276,11 +276,10 @@ class Package:
         name: str = "rsrpc",
         version: str = "0.29.0",
         target: str = "x86_64-unknown-linux-gnu",
-        outdir: str = "out",
     ) -> None:
         self.work = pathlib.Path(tempfile.mkdtemp())
-        self.outdir = outdir
-        (self.work / outdir).mkdir()
+        self.outdir = "dist"
+        (self.work / "dist").mkdir()
         self.outputs_file = self.work / "out.outputs"
         self._make_fixtures()
 
@@ -289,7 +288,6 @@ class Package:
         environment.update(
             {
                 "SOURCE": source,
-                "OUTDIR": outdir,
                 "NAME": name,
                 "VERSION": version,
                 "TARGET": target,
@@ -413,7 +411,6 @@ def effort_beats(script: pathlib.Path, target: str, reference_effort: int) -> st
         environment.update(
             {
                 "SOURCE": "payload",
-                "OUTDIR": "out",
                 "NAME": "eff",
                 "VERSION": "1.0.0",
                 "TARGET": target,
@@ -427,7 +424,7 @@ def effort_beats(script: pathlib.Path, target: str, reference_effort: int) -> st
             text=True,
         )
 
-        ours = next((work / "out").iterdir())
+        ours = next((work / "dist").iterdir())
         with zipfile.ZipFile(ours) as archive:
             member = max(archive.infolist(), key=lambda info: info.file_size)
             ours_size = member.compress_size

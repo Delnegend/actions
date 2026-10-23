@@ -29,10 +29,6 @@ on:
         description: Directory holding package.json/bunfig.toml.
         type: string
         default: "."
-      bun-version:
-        description: Bun version for setup-bun.
-        type: string
-        default: latest
 
 permissions:
   contents: write
@@ -64,8 +60,6 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: inputs.bun
-        with:
-          bun-version: ${{ inputs.bun-version }}
 
       - name: Upgrade Bun dependencies (cooldown in bunfig.toml)
         if: inputs.bun

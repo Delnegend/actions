@@ -106,7 +106,6 @@ def test_build_version_packages(results: Results, script: pathlib.Path) -> None:
         name="app",
         version=version,
         target="x86_64-unknown-linux-gnu",
-        outdir="dist",
     )
     expected = f"app-{version}-x86_64-unknown-linux-gnu.tar.xz"
     if version == "0.0.0-test.abc1234" and (package.work / "dist" / expected).is_file():
