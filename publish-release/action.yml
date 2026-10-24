@@ -22,7 +22,10 @@ inputs:
   files:
     description: Release asset glob, relative to the workspace.
     required: false
-    default: "artifacts/**/*"
+  exclude:
+    description: Space-separated artifact name patterns to skip (e.g. "*.dockerbuild" for Docker build records).
+    required: false
+    default: "*.dockerbuild"
   container:
     description: "'true' for container image releases (auto-defaults image and skips archive download)."
     required: false
@@ -50,6 +53,17 @@ runs:
         # Flatten matrix artifact uploads into single directory.
         merge-multiple: true
 
+    - name: Drop excluded artifacts
+      if: inputs.download == 'true' || (inputs.download != 'false' && inputs.image == '' && inputs.container != 'true')
+      shell: bash
+      env:
+        EXCLUDE: ${{ inputs.exclude }}
+      run: |
+        set -euo pipefail
+        [ -d artifacts ] || exit 0
+        for pattern in $EXCLUDE; do
+          find artifacts -maxdepth 1 -name "$pattern" -exec rm -rf {} +
+        done
     # Generate release notes body.
     - name: Render release body
       id: body
