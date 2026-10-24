@@ -91,4 +91,4 @@ runs:
         name: ${{ inputs.ref }}
         generate_release_notes: true
         body_path: ${{ steps.body.outputs.path }}
-        files: ${{ (inputs.container == 'true' || inputs.image != '' || inputs.download == 'false') && '' || inputs.files }}
+        files: ${{ (inputs.download == 'true' || (inputs.download != 'false' && inputs.image == '' && inputs.container != 'true')) && inputs.files || '' }}

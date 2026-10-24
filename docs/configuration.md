@@ -252,8 +252,8 @@ artifacts, then creates the GitHub release (or skips it on test-builds).
 | `container` | `"false"` | `"true"` for container releases (auto-defaults `image` and skips archive download). |
 | `image` | `""` | Fully qualified image name. Defaults to lowercase `ghcr.io/<repo>` when `container: "true"`. |
 | `version` | `""` | Version tag without `v`, required for container releases. |
-| `download` | `"auto"` | `"true"` downloads archives; auto-skips when `container: "true"` or `image` is set. |
-| `files` | `"artifacts/**/*"` | Release asset glob (omitted for container releases). |
+| `download` | `"auto"` | `"true"` downloads archives; auto-skips when `container: "true"` or `image` is set. Pass `download: "true"` alongside `container: "true"` for hybrid releases. |
+| `files` | `"artifacts/**/*"` | Release asset glob (omitted when `download` is skipped). |
 
 The body is generated here, not written by hand in callers. Install
 instructions belong in the repo's docs (e.g. `docs/deployment.md`), which are
