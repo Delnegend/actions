@@ -1,0 +1,172 @@
+name: twin-checkout
+description: >-
+  Clone a private Forgejo source repository onto a GitHub Actions runner with token auth.
+  Preserves server URL scheme, retries transient failures, and handles credentials safely.
+
+inputs:
+  token:
+    description: Forgejo personal access token for HTTP basic auth (e.g. secrets.FORGEJO).
+    required: false
+    default: ""
+  repository:
+    description: Forgejo repository as owner/name. Defaults to Delnegend/<current-repo-name>.
+    required: false
+    default: ""
+  server_url:
+    description: Forgejo base URL. Defaults to https://git.delnegend.com.
+    required: false
+    default: https://git.delnegend.com
+  ref:
+    description: Branch, tag, or SHA to check out. Defaults to remote's default branch.
+    required: false
+    default: ""
+  fj_repo:
+    description: Convenience shortcut for host/owner/name (e.g. git.delnegend.com/Delnegend/ztna-agent).
+    required: false
+    default: ""
+  path:
+    description: Destination directory, relative to workspace root. Defaults to '.'.
+    required: false
+    default: "."
+  fetch_depth:
+    description: Commits to fetch. '0' fetches full history.
+    required: false
+    default: "0"
+  fetch_tags:
+    description: Fetch all tags after cloning.
+    required: false
+    default: "true"
+  persist_credentials:
+    description: Keep authenticated URL in origin remote.
+    required: false
+    default: "false"
+  clean:
+    description: Delete destination directory contents before cloning.
+    required: false
+    default: "true"
+  retries:
+    description: Clone retry attempts before failing.
+    required: false
+    default: "5"
+
+outputs:
+  sha:
+    description: Full commit SHA checked out.
+    value: ${{ steps.clone.outputs.sha }}
+  ref:
+    description: Branch, tag, or SHA checked out.
+    value: ${{ steps.clone.outputs.ref }}
+  path:
+    description: Destination directory cloned into.
+    value: ${{ steps.clone.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Clone
+      id: clone
+      shell: bash
+      env:
+        IN_TOKEN: ${{ inputs.token }}
+        IN_FJ_REPO: ${{ inputs.fj_repo }}
+        IN_REPOSITORY: ${{ inputs.repository }}
+        IN_SERVER_URL: ${{ inputs.server_url }}
+        IN_REF: ${{ inputs.ref }}
+        IN_PATH: ${{ inputs.path }}
+        IN_FETCH_DEPTH: ${{ inputs.fetch_depth }}
+        IN_FETCH_TAGS: ${{ inputs.fetch_tags }}
+        IN_PERSIST_CREDENTIALS: ${{ inputs.persist_credentials }}
+        IN_CLEAN: ${{ inputs.clean }}
+        IN_RETRIES: ${{ inputs.retries }}
+      run: |
+        set -euo pipefail
+
+        TOKEN="${IN_TOKEN:-${FORGEJO_TOKEN:-${GITHUB_TOKEN:-}}}"
+        if [ -z "$TOKEN" ]; then
+          echo "::error::twin-checkout: no token provided (set 'token: \${{ secrets.FORGEJO }}')"
+          exit 1
+        fi
+
+        if [ -n "${IN_FJ_REPO:-}" ]; then
+          FJ="${IN_FJ_REPO#*://}"
+          SERVER_OVERRIDE="https://${FJ%%/*}"
+          REPO_OVERRIDE="${FJ#*/}"
+        fi
+
+        SERVER="${SERVER_OVERRIDE:-${IN_SERVER_URL:-https://git.delnegend.com}}"
+        SERVER="${SERVER%/}"
+        DEFAULT_REPO="Delnegend/${GITHUB_REPOSITORY#*/}"
+        REPOSITORY="${REPO_OVERRIDE:-${IN_REPOSITORY:-$DEFAULT_REPO}}"
+        TARGET="${IN_PATH:-.}"
+        REF="${IN_REF:-}"
+        DEPTH="${IN_FETCH_DEPTH:-0}"
+        RETRIES="${IN_RETRIES:-5}"
+
+        SCHEME="${SERVER%%://*}"
+        REST="${SERVER#*://}"
+        AUTH_URL="${SCHEME}://oauth2:${TOKEN}@${REST}/${REPOSITORY}.git"
+        CLEAN_URL="${SCHEME}://${REST}/${REPOSITORY}.git"
+
+        git config --global --add safe.directory "*"
+
+        empty_destination() {
+          if [ "$TARGET" = "." ]; then
+            find . -mindepth 1 -delete
+          else
+            rm -rf "$TARGET"
+            mkdir -p "$TARGET"
+          fi
+        }
+
+        if [ "${IN_CLEAN:-true}" = "true" ]; then
+          empty_destination
+        else
+          [ "$TARGET" = "." ] || mkdir -p "$TARGET"
+        fi
+
+        CLONE_ARGS=(--quiet)
+        if [ "$DEPTH" != "0" ]; then
+          CLONE_ARGS+=(--depth "$DEPTH")
+        fi
+
+        attempt=1
+        while true; do
+          if git clone "${CLONE_ARGS[@]}" "$AUTH_URL" "$TARGET"; then
+            break
+          fi
+          if [ "$attempt" -ge "$RETRIES" ]; then
+            echo "::error::git clone of ${REPOSITORY} failed after ${attempt} attempt(s)"
+            exit 1
+          fi
+          echo "git clone failed (attempt ${attempt}); retrying in $((attempt * 3))s..."
+          sleep $((attempt * 3))
+          attempt=$((attempt + 1))
+          empty_destination
+        done
+
+        if [ "${IN_FETCH_TAGS:-true}" = "true" ]; then
+          git -C "$TARGET" fetch --tags --force --quiet origin || true
+        fi
+
+        if [ -n "$REF" ]; then
+          git -C "$TARGET" fetch --quiet origin "$REF" 2>/dev/null || true
+          git -C "$TARGET" checkout --quiet "$REF"
+        fi
+
+        if [ "${IN_PERSIST_CREDENTIALS:-false}" != "true" ]; then
+          git -C "$TARGET" remote set-url origin "$CLEAN_URL"
+        fi
+
+        SHA="$(git -C "$TARGET" rev-parse HEAD)"
+        RESOLVED="$(git -C "$TARGET" rev-parse --abbrev-ref HEAD)"
+        if [ "$RESOLVED" = "HEAD" ]; then
+          RESOLVED="$(git -C "$TARGET" describe --tags --exact-match 2>/dev/null || echo "$SHA")"
+        fi
+
+        echo "checked out ${REPOSITORY} @ ${RESOLVED} (${SHA}) into ${TARGET}"
+
+        {
+          echo "sha=${SHA}"
+          echo "ref=${RESOLVED}"
+          echo "path=${TARGET}"
+        } >> "$GITHUB_OUTPUT"

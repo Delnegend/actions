@@ -294,6 +294,25 @@ staging (example configs) and post-build asserts stay in the caller.
 | `target` | `""` | Build stage. The only stage in use is `server` (l4d2). |
 | `build-args` | `""` | Newline-separated `KEY=VALUE`. |
 
+## twin-checkout
+
+Clones a private Forgejo repository onto a GitHub Actions runner using token auth.
+
+| Input | Default | Description |
+|---|---|---|
+| `token` | — | Forgejo PAT (e.g. `secrets.FORGEJO`). |
+| `server_url` | `https://git.delnegend.com` | Forgejo instance base URL. |
+| `repository` | `Delnegend/<repo>` | Forgejo repository path. |
+| `ref` | Remote default branch | Branch, tag, or commit SHA. |
+| `fetch_depth` | `"0"` | Commit history depth. |
+
+```yaml
+- uses: Delnegend/actions/twin-checkout@<sha> # v1
+  with:
+    token: ${{ secrets.FORGEJO }}
+    ref: ${{ inputs.ref || 'main' }}
+```
+
 ## Reusable workflows
 
 Called as a job, so each of their runs is a separate set of status checks.
