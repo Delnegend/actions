@@ -6,11 +6,21 @@ on:
   workflow_call:
     inputs:
       exclude:
-        description: >-
-          Space-separated scans to skip, e.g. "osv" for a project with no
-          lockfile.
+        description: Space-separated scans to skip.
         type: string
         default: ""
+      ref:
+        description: Ref to check out.
+        type: string
+        default: ""
+      forgejo:
+        description: True to clone from Forgejo (twin repos) using secrets.forgejo_token.
+        type: boolean
+        default: false
+    secrets:
+      forgejo_token:
+        description: Token for private Forgejo checkout (twin repos).
+        required: false
   workflow_dispatch:
     inputs:
       exclude:
@@ -27,9 +37,17 @@ jobs:
     if: "!contains(inputs.exclude, 'gitleaks')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
         with:
-          # Full history required to scan past commits.
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
       - name: Run Gitleaks
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/path" ghcr.io/gitleaks/gitleaks:latest detect --source=/path --verbose
@@ -39,7 +57,17 @@ jobs:
     if: "!contains(inputs.exclude, 'actionlint')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
       # Pinned to prevent upstream rule additions failing unrelated commits.
       - name: Run actionlint
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo rhysd/actionlint:1.7.12
@@ -49,7 +77,17 @@ jobs:
     if: "!contains(inputs.exclude, 'semgrep')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
       - name: Run Semgrep
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/src" returntocorp/semgrep semgrep scan --config=auto --error
 
@@ -58,7 +96,17 @@ jobs:
     if: "!contains(inputs.exclude, 'trivy')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
       # `-w /src` matters: Trivy reads .trivyignore from its working
       # directory, not from the scan target, so a project with one only gets it
       # applied when Trivy runs from inside the tree. Harmless otherwise.
@@ -75,7 +123,17 @@ jobs:
     if: "!contains(inputs.exclude, 'osv')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
       # No lockfile, nothing to scan: skip loudly instead of failing on an
       # empty tree. Lets lockfile-less repos call this workflow with no `with:`.
       - name: Look for a lockfile
