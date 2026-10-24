@@ -56,11 +56,11 @@ version get:
   ...
 
 # rewrite all manifests to $1, no commit/tag
-version bump ver:
+version set ver:
   ...
 ```
 
-| Project shape | `just version get` | `just version bump` |
+| Project shape | `just version get` | `just version set` |
 |---|---|---|
 | Version in `Cargo.toml` | parse `workspace.package` or `package` version | `sed` + `cargo check`/`cargo update -w` |
 | Version in `VERSION` | `cat VERSION` | `printf` to `VERSION` |
@@ -124,7 +124,7 @@ The caller must provide:
   the action reads the full tag history and pushes the commit and tag with the
   checkout's credentials.
 - `contents: write` on the job.
-- `just` on `PATH` with `version get` / `version bump` recipes.
+- `just` on `PATH` with `version get` / `version set` recipes.
 
 ## package-artifact
 

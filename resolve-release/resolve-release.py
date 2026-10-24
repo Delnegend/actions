@@ -20,7 +20,7 @@ Environment, set by the `resolve-release` action wrapper:
 Version I/O is language-agnostic by convention. Every consumer must provide:
 
     just version get        print X.Y.Z (no `v`)
-    just version bump X.Y.Z rewrite all manifests to X.Y.Z, no commit/tag
+    just version set X.Y.Z rewrite all manifests to X.Y.Z, no commit/tag
 
 Missing or empty output fails fast: every repo owns a version file.
 
@@ -106,17 +106,23 @@ def version_get():
     )
 
 
-def version_bump(next_strict):
-    """Rewrite all manifests to next_strict via `just version bump`."""
+def version_set(next_strict):
+    """Rewrite all manifests to next_strict via `just version set` (fallback: `bump`)."""
     try:
         subprocess.run(
-            ["just", "version", "bump", next_strict],
+            ["just", "version", "set", next_strict],
             check=True, text=True,
         )
     except FileNotFoundError:
         fail("`just` not found on PATH; the prepare job must install it.")
-    except subprocess.CalledProcessError as e:
-        fail(f"`just version bump {next_strict}` failed with exit {e.returncode}.")
+    except subprocess.CalledProcessError:
+        try:
+            subprocess.run(
+                ["just", "version", "bump", next_strict],
+                check=True, text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            fail(f"`just version set {next_strict}` failed with exit {e.returncode}.")
 
 
 def classify_ref(ref):
@@ -196,7 +202,7 @@ def ship():
     git("config", "user.name", BOT_NAME)
     git("config", "user.email", BOT_EMAIL)
 
-    version_bump(next_strict)
+    version_set(next_strict)
     git("add", "-u")
     if git_ok("diff", "--staged", "--quiet"):
         fail("bump produced no change in package files")

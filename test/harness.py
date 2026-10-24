@@ -35,7 +35,7 @@ set -euo pipefail
 [ "${1:-}" = "version" ] || { echo "stub just: unsupported (want 'version ...')" >&2; exit 1; }
 case "${2:-}" in
   get) sed -n -E 's/^version = "(.*)"/\\1/p' Cargo.toml 2>/dev/null | head -1 || true ;;
-  bump) [ -n "${3:-}" ] || { echo "stub just: version bump needs a version" >&2; exit 1; }
+  set|bump) [ -n "${3:-}" ] || { echo "stub just: version set needs a version" >&2; exit 1; }
         sed -i -E "s/^version = \\".*\\"/version = \\"$3\\"/" Cargo.toml ;;
   *) echo "stub just: unsupported version subcommand" >&2; exit 1 ;;
 esac
