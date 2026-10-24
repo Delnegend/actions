@@ -16,18 +16,21 @@ inputs:
     required: false
     default: "false"
   download:
-    description: "'true' downloads run artifacts first (binary releases)."
+    description: "'true' downloads run artifacts first. Defaults to true for binary releases, false for container releases."
     required: false
-    default: "true"
+    default: "auto"
   files:
     description: Release asset glob, relative to the workspace.
     required: false
     default: "artifacts/**/*"
+  container:
+    description: "'true' for container image releases (auto-defaults image and skips archive download)."
+    required: false
+    default: "false"
   image:
     description: >-
       Fully qualified image name for a container release, e.g.
-      ghcr.io/delnegend/hath. Empty means a binary release, whose body is
-      the auto-generated notes alone.
+      ghcr.io/delnegend/hath. Defaults to lowercase ghcr.io/<repository> when container is true.
     required: false
     default: ""
   version:
@@ -40,7 +43,7 @@ runs:
   using: composite
   steps:
     - name: Download all artifacts
-      if: inputs.download == 'true'
+      if: inputs.download == 'true' || (inputs.download != 'false' && inputs.image == '' && inputs.container != 'true')
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
       with:
         path: artifacts
@@ -54,17 +57,22 @@ runs:
       shell: bash
       env:
         IMAGE: ${{ inputs.image }}
+        CONTAINER: ${{ inputs.container }}
         VERSION: ${{ inputs.version }}
         REF: ${{ inputs.ref }}
       run: |
         set -euo pipefail
-        if [ -n "$IMAGE" ]; then
-          [ -n "$VERSION" ] || { echo "::error::publish-release: version is required with image" >&2; exit 1; }
+        image="$IMAGE"
+        if [ -z "$image" ] && [ "$CONTAINER" = "true" ]; then
+          image="ghcr.io/$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+        fi
+        if [ -n "$image" ]; then
+          [ -n "$VERSION" ] || { echo "::error::publish-release: version is required for container releases" >&2; exit 1; }
           {
             echo "Container image:"
             echo
             echo '```'
-            echo "docker pull $IMAGE:$VERSION"
+            echo "docker pull $image:$VERSION"
             echo '```'
             echo
             echo "Or \`latest\` for the most recent release. The git tag \`$REF\`"
@@ -83,4 +91,4 @@ runs:
         name: ${{ inputs.ref }}
         generate_release_notes: true
         body_path: ${{ steps.body.outputs.path }}
-        files: ${{ inputs.files }}
+        files: ${{ (inputs.container == 'true' || inputs.image != '' || inputs.download == 'false') && '' || inputs.files }}
