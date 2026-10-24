@@ -22,6 +22,7 @@ inputs:
   files:
     description: Release asset glob, relative to the workspace.
     required: false
+    default: "artifacts/**/*"
   exclude:
     description: Space-separated artifact name patterns to skip (e.g. "*.dockerbuild" for Docker build records).
     required: false
@@ -64,6 +65,7 @@ runs:
         for pattern in $EXCLUDE; do
           find artifacts -maxdepth 1 -name "$pattern" -exec rm -rf {} +
         done
+
     # Generate release notes body.
     - name: Render release body
       id: body
