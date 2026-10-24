@@ -27,6 +27,10 @@ inputs:
     description: Newline-separated KEY=VALUE build arguments.
     required: false
     default: ""
+  token:
+    description: Registry token for GHCR login on publish (pass secrets.GITHUB_TOKEN; composites cannot read secrets).
+    required: false
+    default: ""
 
 outputs:
   digest:
@@ -61,7 +65,7 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ inputs.token }}
 
     # Build linux/amd64 image; load locally on test builds, push on publish.
     - name: Build and push image

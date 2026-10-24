@@ -292,7 +292,7 @@ staging (example configs) and post-build asserts stay in the caller.
 | `image` | `""` | Fully qualified image name. Defaults to lowercase `ghcr.io/<repo>`. |
 | `publish` | `"false"` | Pushes on `"true"`, loads locally otherwise. |
 | `target` | `""` | Build stage. The only stage in use is `server` (l4d2). |
-| `build-args` | `""` | Newline-separated `KEY=VALUE`. |
+| `token` | `""` | Registry token for GHCR login on publish (pass `${{ secrets.GITHUB_TOKEN }}`). |
 
 ## twin-checkout
 
