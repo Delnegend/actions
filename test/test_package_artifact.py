@@ -121,8 +121,7 @@ def run(results: Results) -> None:
     def pkg(source: str, **env) -> Package:
         return Package(script, source=source, env=env)
 
-    # The name is the whole point: <name>-<version>-<target>, version stamped
-    # so a consumer can match it, which is what the Homebrew tap bot needs.
+    # Verify <name>-<version>-<target> archive naming.
     package = pkg("app.sh")
     results.assert_eq(
         "name is <name>-<version>-<target> + platform suffix",
@@ -181,9 +180,7 @@ def run(results: Results) -> None:
     )
     package.close()
 
-    # Format is decided by the target platform and is not a caller choice.
-    # The target decides, not the runner: a Windows target cross-built on
-    # Linux has to come out as zip or a Windows consumer gets a tar.xz.
+    # Target platform chooses format (Windows: zip, others: tar.xz).
     for target, expected in [
         ("x86_64-pc-windows-msvc", "rsrpc-0.29.0-x86_64-pc-windows-msvc.zip"),
         ("i686-pc-windows-gnu", "rsrpc-0.29.0-i686-pc-windows-gnu.zip"),
@@ -200,17 +197,7 @@ def run(results: Results) -> None:
     results.assert_eq("executable bit is recorded in zip", package.mode, "0755")
     package.close()
 
-    # Compression effort is download bandwidth for every consumer, so it is
-    # pinned by measurement rather than by reading the constant: the archive
-    # this action produced must be smaller than the same payload at a lower
-    # effort setting.
-    #
-    # zip shows a real gradient (level 1 through 9 differ measurably on
-    # binary input), so lowering it must be caught. xz does not: on a real
-    # rsRPC binary presets 6, 8 and 9 produce byte-identical output, and
-    # 9|EXTRE is slightly larger. Asking xz to beat preset 8 would therefore
-    # assert something that is not true of the format, so xz is pinned by its
-    # recorded preset instead and zip carries the measurement.
+    # Verify compression settings (zip measured, xz preset checked).
     results.assert_eq(
         "zip at max beats the fastest setting",
         effort_beats(script, "x86_64-pc-windows-msvc", 1),
@@ -218,9 +205,7 @@ def run(results: Results) -> None:
     )
     results.assert_eq("tar.xz is written at preset 9", xz_preset_used(script), "9")
 
-    # The executable suffix comes from the target, not the caller. A Windows
-    # target builds `rsrpc-cli.exe`, so a matrix entry names `rsrpc-cli` and
-    # lets the action find the file.
+    # Windows target resolves .exe when unsuffixed name is given.
     package = pkg("onlyexe", TARGET="x86_64-pc-windows-msvc")
     results.assert_contains(
         "a Windows target appends .exe",
@@ -307,7 +292,6 @@ def run(results: Results) -> None:
     results.assert_contains("non-numeric version fails", package.log, "does not start with a digit")
     package.close()
 
-    # Rebuilding must replace rather than append, and be byte-identical, so
-    # a rebuilt tag does not look like different artifacts to a consumer.
+    # Rebuild must replace output and be byte-identical.
     test_rebuild_is_byte_identical(results, script, "x86_64-pc-windows-msvc")
     test_rebuild_is_byte_identical(results, script, "x86_64-unknown-linux-gnu")

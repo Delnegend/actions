@@ -1,15 +1,6 @@
 name: Auto-merge bot branches
 
-# Reusable auto-merge for bot PRs. Consumers keep their own trigger so the
-# workflow name stays theirs:
-#
-#   automerge:
-#     uses: Delnegend/actions/.github/workflows/reusable-auto-merge.yml@<sha>
-#     with:
-#       extra-head-prefix: 'release/'  # optional, e.g. headless-brave
-#
-# The `dependencies` label is always honoured; `extra-head-prefix` adds one
-# branch-prefix rule (empty disables it).
+# Reusable auto-merge workflow for bot PRs.
 
 on:
   workflow_call:

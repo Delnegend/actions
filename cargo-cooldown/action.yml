@@ -18,9 +18,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # `registry.global-min-publish-age` is stable from Cargo 1.100, and an
-        # older toolchain ignores the key silently. Upgrading anyway would pull
-        # versions with no quarantine at all, so skip instead of shipping that.
+        # Skip if Cargo < 1.100 (registry.global-min-publish-age unsupported).
         version="$(cargo --version | awk '{print $2}')"
         major="${version%%.*}"
         minor="${version#*.}"; minor="${minor%%.*}"

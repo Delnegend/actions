@@ -143,10 +143,7 @@ def preview(kind):
 
 def test_build(ref):
     print(f"Test build against commit {ref} (will not publish).")
-    # The version lands in an archive filename, and the packaging action
-    # requires it to read as a version rather than an arbitrary identifier. A
-    # bare SHA fails that, so prefix it: the archive stays unmistakably a test
-    # build while naming the commit it came from.
+    # Prefix with 0.0.0-test. so artifact packaging validates the version.
     emit(ref=ref, version=f"0.0.0-test.{ref[:7]}", publish="false", skip="false")
 
 
@@ -158,12 +155,7 @@ def rebuild(ref):
 
 
 def recover_stranded_bump(latest):
-    """Tag the commit a previous run bumped but died before tagging.
-
-    Such a commit is not conventional, so the next run reads as having nothing
-    to release — but the manifest is ahead of the latest tag, so the tag is
-    what is missing.
-    """
+    """Tag commit if manifest was bumped but tag push was interrupted."""
     if not latest:
         return False
     version = version_get()
@@ -191,8 +183,7 @@ def ship():
     next_tag, next_strict = env("NEXT"), env("NEXT_STRICT")
     current = env("CURRENT") or "none"
 
-    # NEXT is the signal, not BUMP: when there are no new commits at all the
-    # semver action returns before setting `bump`, so BUMP is empty.
+    # semver-action omits BUMP when there are no new commits.
     if not next_tag or env("BUMP") == "none":
         emit_skip(f"No version bump needed (current: {current}).")
         return
@@ -210,8 +201,7 @@ def ship():
     if git_ok("diff", "--staged", "--quiet"):
         fail("bump produced no change in package files")
     git("commit", "-m", f"chore(release): {next_tag}")
-    # Commit first: a failed tag push is recoverable from the manifest,
-    # a lost commit is not.
+    # Commit before tagging to guarantee manifest updates persist.
     git("push", "origin", "HEAD:main")
     if git_ok("rev-parse", "-q", "--verify", f"refs/tags/{next_tag}"):
         fail(f"tag {next_tag} already exists")
@@ -228,7 +218,7 @@ def main():
         preview(kind)
         return
 
-    # Ref dispatch pins its own commit, so the gate check does not apply.
+    # Gate check only applies to scheduled/manual ship runs.
     if kind == "ship" and env("GATE_SHA"):
         head = git("rev-parse", "HEAD").stdout.strip()
         if head != env("GATE_SHA"):

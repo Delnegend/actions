@@ -1,18 +1,6 @@
 name: Dependency updates (reusable)
 
-# Scheduled upgrade PRs with the 14-day publish quarantine. Every toolchain
-# is opt-in: a caller names the ones it wants, and what it does not name is
-# not touched. The label/PR flow is identical everywhere:
-#
-#   update:
-#     uses: Delnegend/actions/.github/workflows/reusable-deps-update.yml@<sha>
-#     with:
-#       cargo: true
-#       bun: true
-#       bun-dir: frontend
-#
-# Frozen-blob repos (no manifest to upgrade) name neither, and get the same
-# daily no-op check plus Dependabot coverage.
+# Reusable dependency update workflow with 14-day publish quarantine.
 
 on:
   workflow_call:
@@ -48,8 +36,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         if: inputs.cargo
 
-      # Self-reference by moving tag: this file ships with the action, so it
-      # always wants the current cargo-cooldown, not a pinned copy of itself.
+      # Tracks current repository cargo-cooldown release.
       - uses: Delnegend/actions/cargo-cooldown@v1
         id: cargo-cooldown
         if: inputs.cargo

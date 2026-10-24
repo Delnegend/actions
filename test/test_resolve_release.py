@@ -17,10 +17,7 @@ from harness import (
     check_action_metadata,
 )
 
-# The action inputs, as the workflow passes them. The semver-action outputs
-# are empty unless a case says otherwise: NEXT empty is the reliable
-# "nothing to ship" signal, because semver-action returns before setting
-# `bump` when there are no new commits.
+# Default workflow action inputs.
 BASE = {
     "INPUT_REF": "",
     "DRY_RUN": "false",

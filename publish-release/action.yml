@@ -44,14 +44,10 @@ runs:
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
       with:
         path: artifacts
-        # Each matrix entry uploads one archive; merge them into a single
-        # directory rather than one subdirectory per entry.
+        # Flatten matrix artifact uploads into single directory.
         merge-multiple: true
 
-    # One body for every release, generated from what the action already
-    # knows. A container release names the image pull; a binary release is
-    # the generated notes alone. Nothing per-release is ever hand-written
-    # in a caller, so nothing can drift between repos.
+    # Generate release notes body.
     - name: Render release body
       id: body
       if: inputs.publish == 'true'

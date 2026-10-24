@@ -1,21 +1,6 @@
 name: Scan
 
-# Reusable scan bundle. Consumers call it as a job and get every scan back as
-# its own status check, running in parallel on separate runners — a composite
-# action could not do that, since its steps share one runner and so would
-# serialise.
-#
-#   scan:
-#     uses: Delnegend/actions/.github/workflows/scan.yml@<sha>
-#     permissions:
-#       contents: read
-#
-# All scans run by default. Opt out with `exclude` (space-separated).
-#
-#   scan:
-#     uses: Delnegend/actions/.github/workflows/scan.yml@<sha>
-#     with:
-#       exclude: osv
+# Reusable security scan bundle. Call as a job; opt out via 'exclude'.
 
 on:
   workflow_call:
@@ -44,8 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The whole history: a leaked secret lives in a past commit, not in
-          # the tree at HEAD.
+          # Full history required to scan past commits.
           fetch-depth: 0
       - name: Run Gitleaks
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/path" ghcr.io/gitleaks/gitleaks:latest detect --source=/path --verbose
@@ -56,9 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # Pinned, unlike the scans below which float on :latest. actionlint gains
-      # checks between releases, so a floating tag can fail an unrelated commit
-      # when a new rule lands.
+      # Pinned to prevent upstream rule additions failing unrelated commits.
       - name: Run actionlint
         run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo rhysd/actionlint:1.7.12
 

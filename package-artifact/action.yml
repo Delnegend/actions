@@ -59,12 +59,7 @@ runs:
         TARGET: ${{ inputs.target }}
       run: python3 "$GITHUB_ACTION_PATH/package-artifact.py"
 
-    # The archive is uploaded under its final release name, so the Actions run
-    # and the release show the same string a consumer will fetch.
-    #
-    # `uses:` takes a literal, never an expression, so the ref is pinned here
-    # rather than passed in. That is the better arrangement anyway: the pin
-    # lands once in one place instead of in every consumer.
+    # Upload archive under the release stem name.
     - name: Upload archive
       if: inputs.upload == 'true'
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

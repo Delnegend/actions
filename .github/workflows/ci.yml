@@ -14,9 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lints this repository's own workflows. actionlint parses a bare action.yml
-  # as a workflow and reports it invalid, so it is deliberately not pointed at
-  # resolve-release/action.yml — the test job covers that file instead.
+  # actionlint parses bare action.yml as invalid workflow; tested via test job.
   workflow-lint:
     name: Workflow lint (actionlint)
     runs-on: ubuntu-latest
@@ -30,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # git config is needed because the fixtures create throwaway commits.
+      # git identity for fixture commits.
       - name: Configure git
         run: git config --global user.email ci@example.com && git config --global user.name CI
       - name: Run tests

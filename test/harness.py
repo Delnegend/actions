@@ -29,8 +29,7 @@ GREEN = "\033[32m"
 RED = "\033[31m"
 RESET = "\033[0m"
 
-# A `just` stand-in implementing the enforced `version` recipe contract:
-# `just version get` prints X.Y.Z, `just version bump X` rewrites manifests.
+# Test stub implementing the 'just version' recipe contract.
 JUST_STUB = """#!/usr/bin/env bash
 set -euo pipefail
 [ "${1:-}" = "version" ] || { echo "stub just: unsupported (want 'version ...')" >&2; exit 1; }
@@ -42,22 +41,12 @@ case "${2:-}" in
 esac
 """
 
-# A `just` with no `version` recipe at all: the action must fail fast on it.
+# Test stub with missing 'version' recipe.
 JUST_BROKEN_STUB = """#!/usr/bin/env bash
 echo "stub just: no version recipe" >&2; exit 1
 """
 
-# Stands in for a platform that cannot stamp a symlink without following it,
-# and says so rather than quietly following it. Imported automatically by
-# `site` at interpreter startup, so it is in place before the action's own
-# imports run — no rewriting of the action's source needed.
-#
-# Two things make it a platform rather than a bug:
-#   * os.utime is not listed among the calls that support follow_symlinks, so
-#     shutil skips it instead of passing the keyword — which is what a real
-#     Windows runner does.
-#   * os.utime refuses follow_symlinks=False with NotSupportedError, which is
-#     the refusal the action's own fallback exists for.
+# Stubs a platform where os.utime refuses follow_symlinks=False with NotSupportedError.
 WINDOWS_UTIME_SITECUSTOMIZE = '''"""Stand in for a platform that cannot stamp a symlink without following it."""
 import errno
 import os
@@ -74,8 +63,7 @@ def _win_utime(path, times=(), *, ns=None, dir_fd=None, follow_symlinks=True):
     return _real_utime(path, times)
 
 
-# A platform that does not support the keyword does not list the call as
-# supporting it, and shutil reads that list before passing the keyword.
+# Simulate platform without symlink timestamp support.
 os.supports_follow_symlinks.discard(os.utime)
 os.utime = _win_utime
 '''
