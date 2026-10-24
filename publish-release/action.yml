@@ -46,7 +46,7 @@ runs:
   using: composite
   steps:
     - name: Download all artifacts
-      if: inputs.download == 'true' || (inputs.download != 'false' && inputs.image == '' && inputs.container != 'true')
+      if: inputs.download == 'true' || inputs.download == true || ((inputs.download != 'false' && inputs.download != false) && inputs.image == '' && inputs.container != 'true' && inputs.container != true)
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
       with:
         path: artifacts
@@ -54,7 +54,7 @@ runs:
         merge-multiple: true
 
     - name: Drop excluded artifacts
-      if: inputs.download == 'true' || (inputs.download != 'false' && inputs.image == '' && inputs.container != 'true')
+      if: inputs.download == 'true' || inputs.download == true || ((inputs.download != 'false' && inputs.download != false) && inputs.image == '' && inputs.container != 'true' && inputs.container != true)
       shell: bash
       env:
         EXCLUDE: ${{ inputs.exclude }}
@@ -105,4 +105,4 @@ runs:
         name: ${{ inputs.ref }}
         generate_release_notes: true
         body_path: ${{ steps.body.outputs.path }}
-        files: ${{ (inputs.download == 'true' || (inputs.download != 'false' && inputs.image == '' && inputs.container != 'true')) && inputs.files || '' }}
+        files: ${{ (inputs.download == 'true' || inputs.download == true || ((inputs.download != 'false' && inputs.download != false) && inputs.image == '' && inputs.container != 'true' && inputs.container != true)) && inputs.files || '' }}
