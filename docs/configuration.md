@@ -324,5 +324,5 @@ Called as a job, so each of their runs is a separate set of status checks.
 | `scan.yml` | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). Every scan runs by default; `exclude` opts out. Trivy always runs the full `vuln,misconfig,secret` set; a repo-root `osv-scanner.toml`, when present, is used as the quarantine config automatically. |
 
 The first two replace the former copy-pasted `auto-merge.yml` / `deps.yml`
-bodies. Callers keep their triggers and permissions; the workflow owns
-concurrency and the PR flow.
+bodies. Callers keep their triggers and permissions. Dependency update callers
+also own concurrency, preventing overlapping updates without locking twice.

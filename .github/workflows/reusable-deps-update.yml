@@ -22,10 +22,6 @@ permissions:
   contents: write
   pull-requests: write
 
-concurrency:
-  group: deps-main
-  cancel-in-progress: false
-
 jobs:
   update:
     name: Upgrade dependencies
