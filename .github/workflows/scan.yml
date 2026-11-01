@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -98,7 +98,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -125,7 +125,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@bea1937cd3d14780575bdff801af6d888ebc2871 # v1
+        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
