@@ -8,6 +8,12 @@ workspace, so they can read the checkout and push with its credentials — but
 they cannot declare jobs, matrix strategies, or outputs of their own beyond
 what individual steps write.
 
+One trap worth naming: the `secrets` context does not exist inside a composite
+action. A single `${{ secrets.X }}` anywhere in the file — even inside a
+`run:` script's message text, where it reads like documentation — makes the
+whole action fail to load with `Unrecognized named-value: 'secrets'`. Secrets
+must arrive as inputs from the caller.
+
 ```yaml
 name: my-action
 description: What it does, in one sentence.

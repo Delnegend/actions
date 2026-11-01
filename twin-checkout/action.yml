@@ -5,7 +5,7 @@ description: >-
 
 inputs:
   token:
-    description: Forgejo personal access token for HTTP basic auth (e.g. secrets.FORGEJO).
+    description: Forgejo personal access token for HTTP basic auth (pass secrets.FORGEJO from the caller; composites cannot read secrets).
     required: false
     default: ""
   repository:
@@ -83,7 +83,7 @@ runs:
 
         TOKEN="${IN_TOKEN:-${FORGEJO_TOKEN:-${GITHUB_TOKEN:-}}}"
         if [ -z "$TOKEN" ]; then
-          echo "::error::twin-checkout: no token provided (set 'token: \${{ secrets.FORGEJO }}')"
+          echo "::error::twin-checkout: no token provided - set the 'token' input from the caller (composite actions cannot read secrets directly)"
           exit 1
         fi
 

@@ -300,7 +300,7 @@ Clones a private Forgejo repository onto a GitHub Actions runner using token aut
 
 | Input | Default | Description |
 |---|---|---|
-| `token` | — | Forgejo PAT (e.g. `secrets.FORGEJO`). |
+| `token` | — | Forgejo PAT (pass from the caller; composites cannot read secrets). |
 | `server_url` | `https://git.delnegend.com` | Forgejo instance base URL. |
 | `repository` | `Delnegend/<repo>` | Forgejo repository path. |
 | `ref` | Remote default branch | Branch, tag, or commit SHA. |
