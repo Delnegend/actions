@@ -5,18 +5,18 @@ order the release pipeline uses them.
 
 **Composite actions** run inside the caller's job and workspace.
 
-- [`resolve-release`](#resolve-release) — decides and performs the release.
-- [`package-artifact`](#package-artifact) — builds the archive for one target.
-- [`publish-release`](#publish-release) — publishes the release.
-- [`cargo-cooldown`](#cargo-cooldown) — checks the publish quarantine is enforceable.
-- [`docker-build-push`](#docker-build-push) — builds and pushes a container image.
+- [`resolve-release`](#resolve-release): decides and performs the release.
+- [`package-artifact`](#package-artifact): builds the archive for one target.
+- [`publish-release`](#publish-release): publishes the release.
+- [`cargo-cooldown`](#cargo-cooldown): checks the publish quarantine is enforceable.
+- [`docker-build-push`](#docker-build-push): builds and pushes a container image.
 
 **Reusable workflows** are called as a job, and each of their runs is a
 separate set of status checks.
 
-- [`reusable-auto-merge`](#reusable-workflows) — auto-merges bot PRs.
-- [`reusable-deps-update`](#reusable-workflows) — opens dependency-upgrade PRs.
-- [`scan`](#reusable-workflows) — runs the security scans.
+- [`reusable-auto-merge`](#reusable-workflows): auto-merges bot PRs.
+- [`reusable-deps-update`](#reusable-workflows): opens dependency-upgrade PRs.
+- [`scan`](#reusable-workflows): runs the security scans.
 
 ## resolve-release
 
@@ -91,7 +91,7 @@ build:
 
 The `ref` value is classified before anything mutates, so a typo fails the run
 instead of silently doing nothing. A `ref` that is neither a SHA nor a
-`vX.Y.Z` tag is rejected — including on the dry-run path, so a preview cannot
+`vX.Y.Z` tag is rejected, including on the dry-run path, so a preview cannot
 hide a bad invocation.
 
 #### Nothing ungated is released
@@ -103,7 +103,7 @@ the two SHAs. `ref` dispatch pins its own commit and skips this check.
 #### A lost tag is recovered
 
 If an earlier run pushed its bump commit and died before tagging, that commit
-is not conventional — it reads as "nothing to release" to the next run, which
+is not conventional; it reads as "nothing to release" to the next run, which
 would then skip. But the manifest is ahead of the latest tag, so the tag is
 what is missing. The action tags the stranded commit instead.
 
@@ -120,7 +120,7 @@ rewriting history.
 
 The caller must provide:
 
-- `actions/checkout` with `fetch-depth: 0` and `persist-credentials: true` —
+- `actions/checkout` with `fetch-depth: 0` and `persist-credentials: true`:
   the action reads the full tag history and pushes the commit and tag with the
   checkout's credentials.
 - `contents: write` on the job.
@@ -154,9 +154,9 @@ tap.
 |---|---|---|
 | `source` | `""` | Path to a file or directory to package. A directory is packaged whole, recursively. For a Windows target, `.exe` is appended when the path as given is not there, so a matrix entry names the binary once and never repeats the rule. |
 | `extra` | `""` | Space-separated additional paths, for a binary plus its launcher script. |
-| `name` | — | Artifact base name, e.g. `rsrpc`. Required. |
-| `version` | — | Version being released. A leading `v` is dropped. Required. |
-| `target` | — | Platform slug, e.g. `x86_64-unknown-linux-gnu`. Required. |
+| `name` | None | Artifact base name, e.g. `rsrpc`. Required. |
+| `version` | None | Version being released. A leading `v` is dropped. Required. |
+| `target` | None | Platform slug, e.g. `x86_64-unknown-linux-gnu`. Required. |
 | `upload` | `true` | Upload the archive to the Actions run. |
 
 ### What the action decides
@@ -247,7 +247,7 @@ artifacts, then creates the GitHub release (or skips it on test-builds).
 
 | Input | Default | Description |
 |---|---|---|
-| `ref` | — | Tag (or SHA) the build jobs checked out. Required. |
+| `ref` | None | Tag (or SHA) the build jobs checked out. Required. |
 | `publish` | `"false"` | `"true"` creates the release. |
 | `container` | `"false"` | `"true"` for container releases (auto-defaults `image` and skips archive download). |
 | `image` | `""` | Fully qualified image name. Defaults to lowercase `ghcr.io/<repo>` when `container: "true"`. |
@@ -288,7 +288,7 @@ staging (example configs) and post-build asserts stay in the caller.
 
 | Input | Default | Description |
 |---|---|---|
-| `version` | — | Version tag without `v`. Required. |
+| `version` | None | Version tag without `v`. Required. |
 | `image` | `""` | Fully qualified image name. Defaults to lowercase `ghcr.io/<repo>`. |
 | `publish` | `"false"` | Pushes on `"true"`, loads locally otherwise. |
 | `target` | `""` | Build stage. The only stage in use is `server` (l4d2). |
@@ -300,7 +300,7 @@ Clones a private Forgejo repository onto a GitHub Actions runner using token aut
 
 | Input | Default | Description |
 |---|---|---|
-| `token` | — | Forgejo PAT (pass from the caller; composites cannot read secrets). |
+| `token` | None | Forgejo PAT (pass from the caller; composites cannot read secrets). |
 | `server_url` | `https://git.delnegend.com` | Forgejo instance base URL. |
 | `repository` | `Delnegend/<repo>` | Forgejo repository path. |
 | `ref` | Remote default branch | Branch, tag, or commit SHA. |
@@ -320,7 +320,7 @@ Called as a job, so each of their runs is a separate set of status checks.
 | Workflow | Purpose |
 |---|---|
 | `reusable-auto-merge.yml` | Auto-merges dependency PRs (dependabot-style `dependencies` label, optional `extra-head-prefix`), and optionally `release/` branches. |
-| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine. Every toolchain is opt-in: a caller names the ones it wants (`cargo`, `bun`, `bun-dir` — bun at `latest`), and what it does not name is not touched. |
+| `reusable-deps-update.yml` | Opens weekly dependency-upgrade PRs behind the publish quarantine. Every toolchain is opt-in: a caller names the ones it wants (`cargo`, `bun`, `bun-dir`; bun at `latest`), and what it does not name is not touched. |
 | `scan.yml` | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). Every scan runs by default; `exclude` opts out. Trivy always runs the full `vuln,misconfig,secret` set; a repo-root `osv-scanner.toml`, when present, is used as the quarantine config automatically. |
 
 The first two replace the former copy-pasted `auto-merge.yml` / `deps.yml`

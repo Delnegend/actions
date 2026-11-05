@@ -251,7 +251,7 @@ def run(results: Results) -> None:
         },
     )
 
-    # The happy path: bump, commit, tag, push — with a real remote to push to.
+    # The happy path: bump, commit, tag, push, with a real remote to push to.
     run_case(
         results,
         "ship -> bump, tag, push",

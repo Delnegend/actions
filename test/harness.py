@@ -5,7 +5,7 @@ a throwaway git repository stands in for the workspace, environment variables
 stand in for the action inputs, and outputs are read from ``$GITHUB_OUTPUT``
 exactly as the runner would read them.
 
-Nothing here is an action under test — the suites import this and drive the
+Nothing here is an action under test; the suites import this and drive the
 real scripts as subprocesses, so the scripts' own entry point is what gets
 tested.
 """
@@ -118,8 +118,8 @@ class Results:
 def check_action_metadata(results: Results, action_dir: str) -> pathlib.Path:
     """The action's own files must exist, parse, and be wired together.
 
-    actionlint cannot lint an action.yml on its own — it parses one as a
-    workflow — so this is what the action metadata gets.
+    actionlint cannot lint an action.yml on its own: it parses one as a
+    workflow, so this is what the action metadata gets.
     """
     action = REPO_ROOT / action_dir / "action.yml"
     script = REPO_ROOT / action_dir / f"{action_dir}.py"

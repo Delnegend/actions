@@ -30,7 +30,7 @@ job reads:
     semver-next-strict: ${{ steps.semver.outputs.nextStrict }}
 ```
 
-Pin a full commit SHA, never a tag — the same discipline the rest of the
+Pin a full commit SHA, never a tag, following the same discipline the rest of the
 pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 
 ## What's Inside
@@ -56,16 +56,16 @@ separate set of status checks.
 
 ## Highlights
 
-- **Four dispatch modes, one step** — ship a new version, test-build a commit, rebuild an existing tag, or preview — selected by the `ref` input.
-- **Never ships ungated code** — if the branch moves while CI runs, the release refuses rather than publishing a commit nothing checked.
-- **A preview never mutates** — dry-run exits before any tag, commit, or push, on every path.
-- **Recovers a lost tag** — a run that pushed its bump then died before tagging is completed, not silently skipped.
-- **One archive name across every project** — `<name>-<version>-<target>.<ext>`, version-stamped so a formula or script can match it without hardcoding a target triple.
-- **Format and layout are not call-site inputs** — zip for a Windows target, tar.xz otherwise, both at maximum effort, one directory, decided once in one place.
-- **The executable bit survives the round trip** — `download-artifact` strips it, so it is recorded inside the archive rather than restored afterwards.
-- **Reproducible** — timestamps are normalised, so rebuilding a tag produces byte-identical archives.
-- **One scan bundle, opted out not in** — every repo runs gitleaks, actionlint, semgrep, trivy and osv; opting out names the exception instead of restating the rule.
-- **One build-and-push shape** — two tags, zstd layers, gha or registry cache, decided once in `docker-build-push` instead of in four release workflows.
+- **Four dispatch modes, one step**: ship a new version, test-build a commit, rebuild an existing tag, or preview, selected by the `ref` input.
+- **Never ships ungated code**: if the branch moves while CI runs, the release refuses rather than publishing a commit nothing checked.
+- **A preview never mutates**: dry-run exits before any tag, commit, or push, on every path.
+- **Recovers a lost tag**: a run that pushed its bump then died before tagging is completed, not silently skipped.
+- **One archive name across every project**: `<name>-<version>-<target>.<ext>`, version-stamped so a formula or script can match it without hardcoding a target triple.
+- **Format and layout are not call-site inputs**: zip for a Windows target, tar.xz otherwise, both at maximum effort, one directory, decided once in one place.
+- **The executable bit survives the round trip**: `download-artifact` strips it, so it is recorded inside the archive rather than restored afterwards.
+- **Reproducible**: timestamps are normalised, so rebuilding a tag produces byte-identical archives.
+- **One scan bundle, opted out not in**: every repo runs gitleaks, actionlint, semgrep, trivy and osv; opting out names the exception instead of restating the rule.
+- **One build-and-push shape**: two tags, zstd layers, gha or registry cache, decided once in `docker-build-push` instead of in four release workflows.
 
 ## Dispatch Modes
 
@@ -86,8 +86,8 @@ Every input, output, and the `just version` recipe contract:
 
 ## Documentation
 
-- **[Configuration](docs/configuration.md)** — full input and output reference.
-- **[Development](docs/development.md)** — adding an action, testing it, versioning and pinning.
+- **[Configuration](docs/configuration.md)**: full input and output reference.
+- **[Development](docs/development.md)**: adding an action, testing it, versioning and pinning.
 
 ## License
 

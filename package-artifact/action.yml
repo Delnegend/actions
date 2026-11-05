@@ -3,7 +3,7 @@ description: >-
   Stage, archive and upload one build artifact. The caller supplies only what
   is unique to their build: the binary, the version and the target triple.
   Format, compression effort, directory layout and the archive name are
-  decided here — zip at maximum effort on Windows, tar.xz at maximum effort
+  decided here: zip at maximum effort on Windows, tar.xz at maximum effort
   everywhere else, one top-level directory, and the executable bit recorded
   inside the archive.
 

@@ -162,7 +162,7 @@ def run(results: Results) -> None:
     test_windows_cannot_follow_symlinks(results, script)
 
     # EXTRA adds files to a single-source package, which is how a binary and
-    # its launcher script travel together — siblings inside one directory.
+    # its launcher script travel together, as siblings inside one directory.
     package = pkg("app.sh", EXTRA="LICENSE")
     results.assert_contains(
         "EXTRA adds a second file",
