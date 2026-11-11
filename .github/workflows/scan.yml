@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@main
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@main
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@main
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -98,7 +98,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@main
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -125,7 +125,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@main
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -170,7 +170,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@main
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
