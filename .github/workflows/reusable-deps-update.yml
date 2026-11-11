@@ -33,7 +33,7 @@ jobs:
         if: inputs.cargo
 
       # Tracks current repository cargo-cooldown release.
-      - uses: Delnegend/actions/cargo-cooldown@v1
+      - uses: Delnegend/actions/cargo-cooldown@main
         id: cargo-cooldown
         if: inputs.cargo
 

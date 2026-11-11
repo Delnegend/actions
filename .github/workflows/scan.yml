@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -98,7 +98,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -125,7 +125,7 @@ jobs:
     steps:
       - name: Fetch source from Forgejo
         if: inputs.forgejo
-        uses: Delnegend/actions/twin-checkout@3a1278af0530274082d0c50bd4156c0a6839a71a # v1
+        uses: Delnegend/actions/twin-checkout@main
         with:
           token: ${{ secrets.forgejo_token }}
           ref: ${{ inputs.ref }}
@@ -163,3 +163,25 @@ jobs:
           docker run --rm -v "${GITHUB_WORKSPACE}:/src" ghcr.io/google/osv-scanner:latest
           ${{ steps.osv-config.outputs.found == 'true' && '--config=/src/osv-scanner.toml' || '' }}
           --recursive /src
+
+  emdash:
+    name: Check em dashes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@main
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Search for em dashes
+        run: |
+          if git grep -n -I $'\u2014'; then
+            echo "::error::Em dashes (—) found in tracked files. Use hyphens, colons, or parentheses instead."
+            exit 1
+          fi
