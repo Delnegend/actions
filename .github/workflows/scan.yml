@@ -202,7 +202,7 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
       - name: Check README and licenses
-        uses: Delnegend/actions/common-facade@f1856457c83f93a2a8336af372d229d739052a60 # v1
+        uses: Delnegend/common-facade@0d02d2da750c1a7c6e0fe5e5eae7910d07dfcc64 # main
 
   docs-references:
     name: Documentation references
