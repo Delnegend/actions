@@ -52,7 +52,7 @@ separate set of status checks.
 |---|---|
 | [`reusable-auto-merge`](.github/workflows/reusable-auto-merge.yml) | Auto-merges dependency PRs, and optionally `release/` branches. |
 | [`reusable-deps-update`](.github/workflows/reusable-deps-update.yml) | Opens weekly dependency-upgrade PRs behind the publish quarantine. |
-| [`scan`](.github/workflows/scan.yml) | Runs the security scans (gitleaks, actionlint, semgrep, trivy, osv). |
+| [`scan`](.github/workflows/scan.yml) | Runs security scans, common-facade, and documentation reference checks. |
 
 ## Highlights
 

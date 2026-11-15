@@ -185,3 +185,48 @@ jobs:
             echo "::error::Em dashes (—) found in tracked files. Use hyphens, colons, or parentheses instead."
             exit 1
           fi
+
+  facade:
+    name: README and license (common-facade)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Check README and licenses
+        uses: Delnegend/actions/common-facade@f1856457c83f93a2a8336af372d229d739052a60 # v1
+
+  docs-references:
+    name: Documentation references
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Check documentation references
+        shell: bash
+        run: |
+          missing=0
+          while IFS= read -r -d '' file; do
+            if ! grep -Fq -- "$file" README.md; then
+              echo "::error file=README.md::Missing reference to $file"
+              missing=1
+            fi
+          done < <(if [ -d docs ]; then find docs -type f -name '*.md' -print0; fi)
+          exit "$missing"
