@@ -76,7 +76,7 @@ jobs:
           git add -u
           git commit -m "chore(deps): upgrade dependencies"
           git push --force origin deps/automatic
-          if gh pr view deps/automatic --json number >/dev/null 2>&1; then
+          if [ "$(gh pr list --state open --base main --head deps/automatic --json number --jq 'length')" -gt 0 ]; then
             echo "the push updated the existing upgrade PR"
           else
             gh pr create --base main --head deps/automatic \
