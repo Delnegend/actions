@@ -44,6 +44,7 @@ pipeline uses. Resolve `v1` to its commit with `git rev-parse 'v1^{commit}'`.
 | [`publish-release`](publish-release/action.yml) | Downloads the build artifacts and publishes the GitHub release. |
 | [`cargo-cooldown`](cargo-cooldown/action.yml) | Checks that the installed Cargo enforces the 14-day publish quarantine. |
 | [`docker-build-push`](docker-build-push/action.yml) | Builds a container image with Buildx and pushes it, or loads it locally. |
+| [`common-configs`](common-configs/action.yml) | Checks Rust lint and release settings and Bun dependency quarantine. |
 
 **Reusable workflows** are called as a job, and each of their runs is a
 separate set of status checks.
@@ -52,7 +53,7 @@ separate set of status checks.
 |---|---|
 | [`reusable-auto-merge`](.github/workflows/reusable-auto-merge.yml) | Auto-merges dependency PRs, and optionally `release/` branches. |
 | [`reusable-deps-update`](.github/workflows/reusable-deps-update.yml) | Opens weekly dependency-upgrade PRs behind the publish quarantine. |
-| [`scan`](.github/workflows/scan.yml) | Runs security scans, common-facade, and documentation reference checks. |
+| [`scan`](.github/workflows/scan.yml) | Runs security scans, configuration checks, common-facade, and documentation reference checks. |
 
 ## Highlights
 

@@ -1,0 +1,15 @@
+name: common-configs
+description: Check tracked Rust and Bun configuration against the shared policy.
+inputs:
+  path:
+    description: Path to the repository checkout.
+    required: false
+    default: .
+runs:
+  using: composite
+  steps:
+    - name: Check configuration
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+      run: python3 "$GITHUB_ACTION_PATH/common-configs.py" --root "$INPUT_PATH"

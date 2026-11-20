@@ -32,6 +32,47 @@ permissions:
   contents: read
 
 jobs:
+  config-policy:
+    name: Rust and Bun configuration policy
+    if: "!contains(inputs.exclude, 'config-policy')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source from Forgejo
+        if: inputs.forgejo
+        uses: Delnegend/actions/twin-checkout@main  # nosemgrep
+        with:
+          token: ${{ secrets.forgejo_token }}
+          ref: ${{ inputs.ref }}
+          path: source
+      - name: Checkout repository
+        if: "!inputs.forgejo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+          path: source
+          persist-credentials: false
+      - name: Check workflow revision
+        shell: bash
+        env:
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
+        run: |
+          if [ -z "$WORKFLOW_REPOSITORY" ] || [ -z "$WORKFLOW_SHA" ]; then
+            echo "::error::Reusable workflow repository or revision is missing"
+            exit 1
+          fi
+      - name: Checkout configuration tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          path: config-policy-tools
+          persist-credentials: false
+      - name: Check Rust and Bun configuration
+        uses: ./config-policy-tools/common-configs
+        with:
+          path: source
+
   gitleaks:
     name: Secret Scanning (Gitleaks)
     if: "!contains(inputs.exclude, 'gitleaks')"

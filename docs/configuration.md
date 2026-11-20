@@ -10,6 +10,7 @@ order the release pipeline uses them.
 - [`publish-release`](#publish-release): publishes the release.
 - [`cargo-cooldown`](#cargo-cooldown): checks the publish quarantine is enforceable.
 - [`docker-build-push`](#docker-build-push): builds and pushes a container image.
+- [`common-configs`](#common-configs): checks tracked Rust and Bun settings.
 
 **Reusable workflows** are called as a job, and each of their runs is a
 separate set of status checks.
@@ -17,6 +18,40 @@ separate set of status checks.
 - [`reusable-auto-merge`](#reusable-workflows): auto-merges bot PRs.
 - [`reusable-deps-update`](#reusable-workflows): opens dependency-upgrade PRs.
 - [`scan`](#reusable-workflows): runs the security scans.
+
+## common-configs
+
+The `scan` workflow runs this check unless `exclude` contains `config-policy`.
+For each tracked `bun.lock` or `bun.lockb`, a tracked `bunfig.toml` beside the
+lockfile must set `[install] minimumReleaseAge` to at least `1209600` seconds
+(14 days). Other settings are allowed. `minimumReleaseAgeExcludes` entries are
+reported as notices because those packages bypass the quarantine. The check
+does not inspect update commands, other working directories, CLI overrides, or
+global Bun configuration; run dependency updates in the checked directory.
+
+The action takes a `path` input (default `.`) pointing to a Git checkout. It
+examines tracked Rust manifests and resolves their workspaces offline with Cargo.
+Repositories without tracked Rust pass; tracked Rust without a manifest fails.
+Repositories with tracked Rust manifests must also track `clippy.toml` and
+`.cargo/config.toml` at the checkout root. `clippy.toml` must set
+`allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-panic-in-tests`, and
+`allow-indexing-slicing-in-tests` to `true`. `.cargo/config.toml` must set
+`registry.global-min-publish-age` to `"14 days"` and
+`resolver.incompatible-publish-age` to `"deny"`. Other settings are allowed.
+
+Each package must declare `pedantic` and `nursery` as `deny` with priority at
+most -1, plus `unwrap_used`, `expect_used`, `indexing_slicing`,
+`arithmetic_side_effects`, `unreachable`, `unimplemented`,
+`unchecked_time_subtraction`, `todo`, `string_slice`, `panic_in_result_fn`,
+`panic`, `exit`, and `as_conversions` as `deny` or `forbid` at a higher
+priority. Packages may inherit these from `workspace.lints` using
+`[lints] workspace = true`.
+
+Every workspace root, including standalone libraries, must set release `lto`
+to `"thin"`, `codegen-units` to `1`, and `strip` to `true` or `"symbols"`.
+Release `opt-level` must be `3` or omitted. The check covers declared settings,
+not source attributes, custom profiles, build flags, environment variables, or
+Cargo configuration overrides. It requires Git, Cargo, and Python 3.11 or newer.
 
 ## resolve-release
 

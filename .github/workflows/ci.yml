@@ -33,3 +33,6 @@ jobs:
         run: git config --global user.email ci@example.com && git config --global user.name CI
       - name: Run tests
         run: ./test/run.py
+      - name: Test Rust configuration scan
+        shell: bash
+        run: python3 -m unittest discover -s common-configs -p 'test_*.py'
